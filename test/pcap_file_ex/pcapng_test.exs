@@ -44,6 +44,20 @@ defmodule PcapFileEx.PcapNgTest do
         assert is_integer(packet.orig_len)
         assert is_binary(packet.data)
         assert byte_size(packet.data) > 0
+        assert packet.protocol in [nil, :tcp, :udp, :icmp, :icmp6, :http]
+        assert is_list(packet.protocols)
+        if packet.protocol, do: assert(List.last(packet.protocols) == packet.protocol)
+
+        if packet.src do
+          assert is_binary(packet.src)
+          assert packet.src != ""
+        end
+
+        if packet.dst do
+          assert is_binary(packet.dst)
+          assert packet.dst != ""
+        end
+
         assert {:ok, decoded} = Packet.pkt_decode(packet)
         assert decoded == Packet.pkt_decode!(packet)
 
@@ -87,6 +101,20 @@ defmodule PcapFileEx.PcapNgTest do
           assert %DateTime{} = packet.timestamp
           assert is_integer(packet.orig_len)
           assert is_binary(packet.data)
+          assert packet.protocol in [nil, :tcp, :udp, :icmp, :icmp6, :http]
+          assert is_list(packet.protocols)
+          if packet.protocol, do: assert(List.last(packet.protocols) == packet.protocol)
+
+          if packet.src do
+            assert is_binary(packet.src)
+            assert packet.src != ""
+          end
+
+          if packet.dst do
+            assert is_binary(packet.dst)
+            assert packet.dst != ""
+          end
+
           assert {:ok, decoded} = Packet.pkt_decode(packet)
           assert decoded == Packet.pkt_decode!(packet)
         end)
@@ -106,6 +134,8 @@ defmodule PcapFileEx.PcapNgTest do
         Enum.each(packets, fn packet ->
           assert packet.timestamp.year >= 2024
           assert packet.timestamp.month in 1..12
+          if packet.src, do: assert(String.length(packet.src) > 0)
+          if packet.dst, do: assert(String.length(packet.dst) > 0)
         end)
       end
     end

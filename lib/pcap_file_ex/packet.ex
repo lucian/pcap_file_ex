@@ -3,7 +3,7 @@ defmodule PcapFileEx.Packet do
   Represents a captured network packet.
   """
 
-  alias PcapFileEx.HTTP
+  alias PcapFileEx.{DecoderRegistry, HTTP}
 
   @loopback_ipv6_families [10, 23, 24, 28, 30]
   @pkt_protocol_map %{
@@ -23,10 +23,14 @@ defmodule PcapFileEx.Packet do
           timestamp: DateTime.t(),
           orig_len: non_neg_integer(),
           data: binary(),
-          datalink: String.t() | nil
+          datalink: String.t() | nil,
+          protocols: [atom()],
+          protocol: atom() | nil,
+          src: String.t() | nil,
+          dst: String.t() | nil
         }
 
-  defstruct [:timestamp, :orig_len, :data, :datalink]
+  defstruct [:timestamp, :orig_len, :data, :datalink, :protocols, :protocol, :src, :dst]
 
   @doc """
   Creates a Packet struct from a map returned by the NIF.
@@ -38,12 +42,18 @@ defmodule PcapFileEx.Packet do
     timestamp = DateTime.add(timestamp, map.timestamp_nanos, :nanosecond)
     base_data = :binary.list_to_bin(map.data)
     {data, normalized_datalink} = normalize_loopback(base_data, datalink)
+    {protocols, src, dst} = extract_metadata(data, normalized_datalink)
+    protocol = List.last(protocols)
 
     %__MODULE__{
       timestamp: timestamp,
       orig_len: map.orig_len,
       data: data,
-      datalink: normalized_datalink
+      datalink: normalized_datalink,
+      protocols: protocols,
+      protocol: protocol,
+      src: src,
+      dst: dst
     }
   end
 
@@ -75,7 +85,7 @@ defmodule PcapFileEx.Packet do
   """
   @spec pkt_protocol(t()) :: atom()
   def pkt_protocol(%__MODULE__{datalink: datalink}) do
-    Map.get(@pkt_protocol_map, datalink, @default_pkt_protocol)
+    protocol_from_datalink(datalink)
   end
 
   @doc """
@@ -140,6 +150,25 @@ defmodule PcapFileEx.Packet do
     extract_payload(packet, :udp)
   end
 
+  @doc """
+  Attempts to decode the payload using the registered application decoders.
+
+  Returns `{:ok, {protocol, decoded}}` when a decoder matches, `:no_match` when
+  none do, or `{:error, reason}` if the decoder raises or returns an error tuple.
+  """
+  @spec decode_registered(t()) :: {:ok, {atom(), term()}} | :no_match | {:error, term()}
+  def decode_registered(%__MODULE__{} = packet) do
+    with {:ok, {layers, payload}} <-
+           decode_layers(protocol_from_datalink(packet.datalink), packet.data),
+         {:ok, entry} <- find_decoder(layers, payload),
+         {:ok, decoded} <- safe_decode(entry, payload) do
+      {:ok, {entry.protocol, decoded}}
+    else
+      :no_match -> :no_match
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp extract_payload(packet, required_protocol) do
     case pkt_decode(packet) do
       {:ok, {layers, payload}} when is_binary(payload) ->
@@ -178,4 +207,182 @@ defmodule PcapFileEx.Packet do
   end
 
   defp layer_protocol?(layer, protocol), do: layer == protocol
+
+  defp extract_metadata(data, datalink) do
+    with {:ok, {layers, payload}} <- decode_layers(protocol_from_datalink(datalink), data) do
+      layers_list = List.wrap(layers)
+      protocols = build_protocol_stack(layers_list, payload)
+      {src_ip, dst_ip, src_port, dst_port} = extract_endpoints(layers_list)
+
+      src = compose_endpoint(src_ip, src_port)
+      dst = compose_endpoint(dst_ip, dst_port)
+
+      {protocols, src, dst}
+    else
+      _ -> {[], nil, nil}
+    end
+  end
+
+  defp build_protocol_stack(layers, payload) do
+    base =
+      layers
+      |> Enum.map(&layer_atom/1)
+      |> Enum.reject(&is_nil/1)
+
+    applications =
+      DecoderRegistry.list()
+      |> Enum.reduce([], fn entry, acc ->
+        if safe_match?(entry, layers, payload) do
+          acc ++ [entry.protocol]
+        else
+          acc
+        end
+      end)
+
+    (base ++ applications)
+    |> Enum.uniq()
+  end
+
+  defp decode_layers(proto, data) do
+    try do
+      case :pkt.decode(proto, data) do
+        {:ok, {layers, payload}} -> {:ok, {List.wrap(layers), payload}}
+        {:ok, layers} when is_list(layers) -> {:ok, {layers, ""}}
+        {:ok, layer} -> {:ok, {List.wrap(layer), ""}}
+        {:error, _} = error -> error
+        other -> {:error, {:unexpected_decode, other}}
+      end
+    rescue
+      _ -> {:error, :decode_failed}
+    end
+  end
+
+  defp find_decoder(layers, payload) do
+    DecoderRegistry.list()
+    |> Enum.find(&safe_match?(&1, layers, payload))
+    |> case do
+      nil -> :no_match
+      entry -> {:ok, entry}
+    end
+  end
+
+  defp safe_match?(%{matcher: matcher}, layers, payload) do
+    try do
+      matcher.(layers, payload)
+    rescue
+      _ -> false
+    end
+  end
+
+  defp safe_decode(%{decoder: decoder}, payload) do
+    try do
+      case decoder.(payload) do
+        {:ok, value} -> {:ok, value}
+        {:error, reason} -> {:error, reason}
+        value -> {:ok, value}
+      end
+    rescue
+      exception -> {:error, exception}
+    end
+  end
+
+  defp layer_atom(layer) when is_tuple(layer) and tuple_size(layer) > 0, do: elem(layer, 0)
+  defp layer_atom(layer) when is_atom(layer), do: layer
+  defp layer_atom(_), do: nil
+
+  defp extract_endpoints(layers) do
+    Enum.reduce(layers, {nil, nil, nil, nil}, fn layer, {src_ip, dst_ip, src_port, dst_port} ->
+      case layer_atom(layer) do
+        :ipv4 ->
+          {new_src, new_dst} = ipv4_addresses(layer)
+          {new_src || src_ip, new_dst || dst_ip, src_port, dst_port}
+
+        :ipv6 ->
+          {new_src, new_dst} = ipv6_addresses(layer)
+          {new_src || src_ip, new_dst || dst_ip, src_port, dst_port}
+
+        :tcp ->
+          {new_src_port, new_dst_port} = transport_ports(layer)
+          {src_ip, dst_ip, new_src_port || src_port, new_dst_port || dst_port}
+
+        :udp ->
+          {new_src_port, new_dst_port} = transport_ports(layer)
+          {src_ip, dst_ip, new_src_port || src_port, new_dst_port || dst_port}
+
+        _ ->
+          {src_ip, dst_ip, src_port, dst_port}
+      end
+    end)
+  end
+
+  defp format_ip({_, _, _, _} = ip), do: ip |> :inet.ntoa() |> to_string()
+  defp format_ip({_, _, _, _, _, _, _, _} = ip), do: ip |> :inet.ntoa() |> to_string()
+  defp format_ip(_), do: nil
+
+  defp compose_endpoint(nil, _port), do: nil
+  defp compose_endpoint(ip, nil), do: ip
+  defp compose_endpoint(ip, port), do: "#{ip}:#{port}"
+
+  defp protocol_from_datalink(datalink) do
+    Map.get(@pkt_protocol_map, datalink, @default_pkt_protocol)
+  end
+
+  defp ipv4_addresses({:ipv4, _, _, _, _, _, _, _, _, _, _, _, src, dst, _}),
+    do: {format_ip(src), format_ip(dst)}
+
+  defp ipv4_addresses(layer), do: tuple_ip_addresses(layer)
+
+  defp ipv6_addresses(layer), do: tuple_ip_addresses(layer)
+
+  defp tuple_ip_addresses(layer) when is_tuple(layer) do
+    layer
+    |> Tuple.to_list()
+    |> Enum.filter(&ip_tuple?/1)
+    |> case do
+      [src, dst | _] -> {format_ip(src), format_ip(dst)}
+      _ -> {nil, nil}
+    end
+  end
+
+  defp tuple_ip_addresses(_), do: {nil, nil}
+
+  defp transport_ports(layer) when is_tuple(layer) and tuple_size(layer) >= 3 do
+    src = elem(layer, 1)
+    dst = elem(layer, 2)
+
+    if is_integer(src) and is_integer(dst) do
+      {src, dst}
+    else
+      {nil, nil}
+    end
+  end
+
+  defp transport_ports(_), do: {nil, nil}
+
+  defp ip_tuple?(value) when is_tuple(value) do
+    size = tuple_size(value)
+
+    cond do
+      size == 4 or size == 8 ->
+        Enum.all?(Tuple.to_list(value), &is_integer/1)
+
+      true ->
+        false
+    end
+  end
+
+  defp ip_tuple?(_), do: false
+
+  @doc """
+  Returns the list of protocols that may appear in `packet.protocols`.
+  """
+  @spec known_protocols() :: [atom()]
+  def known_protocols do
+    base = @pkt_protocol_map |> Map.values() |> Enum.uniq()
+    apps = DecoderRegistry.list() |> Enum.map(& &1.protocol)
+
+    (base ++ apps)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
 end

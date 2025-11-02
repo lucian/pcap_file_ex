@@ -16,6 +16,7 @@ defmodule PcapFileEx.UDPTest do
     assert telemetry["sensor"] == "sensor-1"
     assert telemetry["value"] == 25.5
     assert telemetry["seq"] == 1
+    assert :no_match = Packet.decode_registered(packet)
   end
 
   test "decodes UDP telemetry response payload" do
@@ -27,6 +28,7 @@ defmodule PcapFileEx.UDPTest do
     assert telemetry["received"] == 25.5
     assert telemetry["status"] == "ok"
     assert telemetry["ts"] == 1_730_575_588.123
+    assert :no_match = Packet.decode_registered(packet)
   end
 
   test "filter recognizes UDP packets" do

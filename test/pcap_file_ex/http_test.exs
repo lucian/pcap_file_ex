@@ -26,6 +26,11 @@ defmodule PcapFileEx.HTTPTest do
 
     assert packet
     assert {:ok, http} = Packet.decode_http(packet)
+    assert packet.protocol == :http
+    assert :http in packet.protocols
+    assert List.last(packet.protocols) == :http
+    assert {:ok, {:http, decoded_http}} = Packet.decode_registered(packet)
+    assert decoded_http == http
 
     assert http.type == :request
     assert http.method == "GET"
@@ -47,6 +52,11 @@ defmodule PcapFileEx.HTTPTest do
 
     assert packet
     assert {:ok, http} = Packet.decode_http(packet)
+    assert packet.protocol == :http
+    assert :http in packet.protocols
+    assert List.last(packet.protocols) == :http
+    assert {:ok, {:http, decoded_http}} = Packet.decode_registered(packet)
+    assert decoded_http == http
 
     assert http.type == :response
     assert http.status_code == 200
@@ -58,5 +68,9 @@ defmodule PcapFileEx.HTTPTest do
 
   test "returns error for non-HTTP payload", %{packets: [first | _]} do
     assert {:error, :empty_payload} = Packet.decode_http(first)
+  end
+
+  test "known protocols include http" do
+    assert :http in Packet.known_protocols()
   end
 end

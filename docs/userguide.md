@@ -271,20 +271,31 @@ Represents a captured network packet.
 - `orig_len` - `integer()` - Original packet length on wire
 - `data` - `binary()` - Raw packet data (may be truncated)
 - `datalink` - `String.t()` - Link layer type (e.g., `"ethernet"`, `"null"`)
+- `protocols` - `[atom()]` - Ordered protocol stack decoded for the packet
+- `protocol` - `atom()` - Highest decoded protocol (e.g., `:tcp`, `:udp`)
+- `src` - `String.t()` - Source endpoint (IP or IP:port when available)
+- `dst` - `String.t()` - Destination endpoint (IP or IP:port when available)
 
 ```elixir
 %PcapFileEx.Packet{
   timestamp: ~U[2025-11-02 12:34:56.123456Z],
   orig_len: 1514,
   data: <<0x00, 0x01, 0x02, ...>>,
-  datalink: "ethernet"
+  datalink: "ethernet",
+  protocols: [:ether, :ipv4, :tcp, :http],
+  protocol: :tcp,
+  src: "127.0.0.1:55014",
+  dst: "127.0.0.1:8899"
 }
 ```
 
 > Loopback captures automatically drop the 4-byte pseudo-header and remap `datalink`
 > to `"ipv4"`/`"ipv6"`, so downstream protocol decoders can operate directly on the IP payload.
-> Use `PcapFileEx.Packet.pkt_decode/1` (or `pkt_decode!/1`) to forward packets to the [`pkt`](https://hex.pm/packages/pkt)
-> library with the proper link-type atom.
+> `protocols` captures the ordered decode stack (mirroring Wireshark columns) with `protocol`
+> set to its final entry. Use `PcapFileEx.Packet.known_protocols/0` to inspect supported atoms.
+> `PcapFileEx.Packet.pkt_decode/1` (or `pkt_decode!/1`) forwards packets to the [`pkt`](https://hex.pm/packages/pkt)
+> library with the proper link-type atom. Payloads are not decoded automatically—call
+> helpers such as `PcapFileEx.Packet.decode_http/1` when you need structured data.
 
 #### `PcapFileEx.HTTP`
 
@@ -380,7 +391,46 @@ decoded =
 response = List.first(decoded)
 IO.inspect(response.headers["content-type"])
 IO.puts(response.body)
+
+# List known protocol atoms recognised during decoding
+IO.inspect(PcapFileEx.Packet.known_protocols())
+
+# Attempt automatic application decoding using registered decoders
+case PcapFileEx.Packet.decode_registered(List.first(http_packets)) do
+  {:ok, {protocol, value}} -> IO.inspect({protocol, value})
+  :no_match -> :noop
+  {:error, reason} -> IO.warn("decoder failed: #{inspect(reason)}")
+end
 ```
+
+### Custom Decoders
+
+Register additional protocol decoders at runtime when you need to recognise custom payloads:
+
+```elixir
+PcapFileEx.DecoderRegistry.register(%{
+  protocol: :my_proto,
+  matcher: fn layers, payload ->
+    Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) and MyProto.match?(payload)
+  end,
+  decoder: fn payload -> {:ok, MyProto.decode(payload)} end
+})
+
+packet =
+  PcapFileEx.stream("capture.pcapng")
+  |> Enum.find(&(:my_proto in &1.protocols))
+
+case PcapFileEx.Packet.decode_registered(packet) do
+  {:ok, {:my_proto, decoded}} -> IO.inspect(decoded)
+  :no_match -> :noop
+end
+
+# Remove the decoder when no longer needed
+PcapFileEx.DecoderRegistry.unregister(:my_proto)
+```
+
+For examples of protocol heuristics see Wireshark's
+[Lua dissector tutorial](https://www.wireshark.org/docs/wsdg_html_chunked/wslua_dissector_example.html).
 
 ### Packet Statistics
 
