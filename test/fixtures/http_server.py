@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Simple HTTP server for generating test traffic."""
+
+import http.server
+import socketserver
+import sys
+from threading import Thread
+import time
+
+PORT = 8899
+
+
+class TestHTTPHandler(http.server.SimpleHTTPRequestHandler):
+    """Handler that responds to specific test requests."""
+
+    def do_GET(self):
+        if self.path == "/hello":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Hello, World!")
+        elif self.path == "/json":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"message": "test", "status": "ok"}')
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        """Suppress log messages."""
+        pass
+
+
+def run_server(port=PORT):
+    """Run the HTTP server."""
+    with socketserver.TCPServer(("127.0.0.1", port), TestHTTPHandler) as httpd:
+        print(f"Server running on http://127.0.0.1:{port}")
+        httpd.serve_forever()
+
+
+if __name__ == "__main__":
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
+    run_server(port)

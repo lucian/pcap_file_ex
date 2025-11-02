@@ -1,0 +1,13 @@
+[package]
+name = "pcap_file_ex"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pcap_file_ex"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37.0"
+pcap-file = { git = "https://github.com/courvoif/pcap-file" }
+thiserror = "1.0"
