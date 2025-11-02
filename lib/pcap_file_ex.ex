@@ -5,28 +5,40 @@ defmodule PcapFileEx do
   This library provides functionality to read packet capture files commonly used
   with tools like Wireshark, tcpdump, and dumpcap.
 
+  ## Modules
+
+  - `PcapFileEx` - Main API with format auto-detection
+  - `PcapFileEx.Pcap` - PCAP format reader
+  - `PcapFileEx.PcapNg` - PCAPNG format reader
+  - `PcapFileEx.Stats` - Statistics and analysis
+  - `PcapFileEx.Filter` - Packet filtering helpers
+  - `PcapFileEx.Validator` - File validation
+
   ## Examples
 
-      # Open and read a PCAP file
-      {:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
-      IO.inspect(reader.header)
-
-      # Read packets one at a time
-      {:ok, packet} = PcapFileEx.Pcap.next_packet(reader)
-      IO.inspect(packet.timestamp)
-      IO.inspect(byte_size(packet.data))
+      # Open and read a PCAP file (format auto-detected)
+      {:ok, reader} = PcapFileEx.open("capture.pcap")
 
       # Read all packets at once
       {:ok, packets} = PcapFileEx.read_all("capture.pcap")
-      Enum.each(packets, fn packet ->
-        IO.puts("Packet at \#{packet.timestamp}: \#{byte_size(packet.data)} bytes")
-      end)
 
       # Stream packets lazily (memory efficient for large files)
       PcapFileEx.stream("capture.pcap")
       |> Stream.filter(fn packet -> byte_size(packet.data) > 1000 end)
-      |> Stream.map(fn packet -> {packet.timestamp, byte_size(packet.data)} end)
       |> Enum.take(10)
+
+      # Compute statistics
+      {:ok, stats} = PcapFileEx.Stats.compute("capture.pcap")
+      IO.inspect(stats.packet_count)
+
+      # Filter packets
+      PcapFileEx.stream("capture.pcap")
+      |> PcapFileEx.Filter.by_size(100..1500)
+      |> PcapFileEx.Filter.larger_than(500)
+      |> Enum.to_list()
+
+      # Validate file
+      {:ok, :pcap} = PcapFileEx.Validator.validate("capture.pcap")
   """
 
   alias PcapFileEx.{Pcap, PcapNg, Stream}

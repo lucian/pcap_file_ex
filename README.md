@@ -11,6 +11,9 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **PCAP Support** - Read legacy PCAP format files
 - ✅ **PCAPNG Support** - Read next-generation PCAPNG format files
 - ✅ **Auto-Detection** - Automatic format detection based on magic numbers
+- ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
+- ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
+- ✅ **Validation** - File format validation and accessibility checks
 
 ## Installation
 
@@ -128,6 +131,43 @@ PcapFileEx.stream("capture.pcap")
 end)
 ```
 
+### Compute statistics
+
+```elixir
+{:ok, stats} = PcapFileEx.Stats.compute("capture.pcap")
+IO.puts("Packets: #{stats.packet_count}")
+IO.puts("Total bytes: #{stats.total_bytes}")
+IO.puts("Duration: #{stats.duration_seconds}s")
+IO.puts("Avg packet size: #{stats.avg_packet_size}")
+```
+
+### Filter packets
+
+```elixir
+# Chain multiple filters
+PcapFileEx.stream("capture.pcap")
+|> PcapFileEx.Filter.by_size(100..1500)
+|> PcapFileEx.Filter.larger_than(500)
+|> PcapFileEx.Filter.contains("HTTP")
+|> Enum.take(10)
+
+# Time-based filtering
+start_time = ~U[2025-11-02 10:00:00Z]
+end_time = ~U[2025-11-02 11:00:00Z]
+
+PcapFileEx.stream("capture.pcap")
+|> PcapFileEx.Filter.by_time_range(start_time, end_time)
+|> Enum.to_list()
+```
+
+### Validate files
+
+```elixir
+{:ok, :pcap} = PcapFileEx.Validator.validate("capture.pcap")
+true = PcapFileEx.Validator.pcap?("capture.pcap")
+{:ok, size} = PcapFileEx.Validator.file_size("capture.pcap")
+```
+
 ## Data Structures
 
 ### Packet
@@ -218,10 +258,12 @@ PcapFileEx.stream("huge_10gb.pcap")
 - [x] Automatic format detection
 - [x] Lazy streaming API
 - [x] Type-safe structs
-- [x] Comprehensive tests
+- [x] Statistics and analysis
+- [x] Packet filtering DSL
+- [x] File validation
+- [x] Comprehensive tests (65 passing)
 - [ ] Packet writing capabilities
 - [ ] Protocol parsing helpers (Ethernet, IP, TCP, etc.)
-- [ ] Filtering DSL
 
 ## Contributing
 
