@@ -44,6 +44,8 @@ defmodule PcapFileEx.PcapNgTest do
         assert is_integer(packet.orig_len)
         assert is_binary(packet.data)
         assert byte_size(packet.data) > 0
+        assert {:ok, decoded} = Packet.pkt_decode(packet)
+        assert decoded == Packet.pkt_decode!(packet)
 
         PcapNg.close(reader)
       end
@@ -85,6 +87,8 @@ defmodule PcapFileEx.PcapNgTest do
           assert %DateTime{} = packet.timestamp
           assert is_integer(packet.orig_len)
           assert is_binary(packet.data)
+          assert {:ok, decoded} = Packet.pkt_decode(packet)
+          assert decoded == Packet.pkt_decode!(packet)
         end)
       end
     end

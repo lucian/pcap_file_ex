@@ -158,6 +158,37 @@ end_time = ~U[2025-11-02 11:00:00Z]
 PcapFileEx.stream("capture.pcap")
 |> PcapFileEx.Filter.by_time_range(start_time, end_time)
 |> Enum.to_list()
+
+### Filter by protocol
+
+```elixir
+# Pull only HTTP application payloads
+http_packets =
+  PcapFileEx.stream("capture.pcapng")
+  |> PcapFileEx.Filter.by_protocol(:http)
+  |> Enum.to_list()
+
+# Transport-level filtering works the same way
+tcp_handshakes =
+  PcapFileEx.stream("capture.pcapng")
+  |> PcapFileEx.Filter.by_protocol(:tcp)
+  |> Enum.take(5)
+
+# Decode filtered packets into structured HTTP messages
+decoded_http =
+  PcapFileEx.stream("capture.pcapng")
+  |> PcapFileEx.Filter.by_protocol(:http)
+  |> Enum.map(&PcapFileEx.Packet.decode_http!/1)
+```
+
+### Decode with the pkt library
+
+```elixir
+{:ok, packets} = PcapFileEx.read_all("capture.pcapng")
+packet = hd(packets)
+decoded = PcapFileEx.Packet.pkt_decode!(packet)
+IO.inspect(decoded)
+```
 ```
 
 ### Validate files
@@ -176,8 +207,31 @@ true = PcapFileEx.Validator.pcap?("capture.pcap")
 %PcapFileEx.Packet{
   timestamp: ~U[2025-11-02 12:34:56.123456Z],  # DateTime
   orig_len: 1514,                               # Original packet length
-  data: <<0x00, 0x01, 0x02, ...>>              # Raw packet data (binary)
+  data: <<0x00, 0x01, 0x02, ...>>,             # Raw packet data (binary)
+  datalink: "ethernet"                          # Link-layer type for the packet
 }
+
+Loopback captures are normalized automatically: the 4-byte pseudo-header is removed and `datalink`
+is remapped to `"ipv4"`/`"ipv6"` so that protocol decoders operate directly on the payload.
+Call `PcapFileEx.Packet.pkt_decode/1` or `pkt_decode!/1` to hand packets to the [`pkt`](https://hex.pm/packages/pkt) library with the correct link type.
+
+### HTTP Message
+
+```elixir
+%PcapFileEx.HTTP{
+  type: :response,
+  version: "1.0",
+  status_code: 200,
+  reason_phrase: "OK",
+  headers: %{"content-type" => "text/plain", "server" => "SimpleHTTP/0.6 Python/3.13.5"},
+  body: "Hello, World!",
+  body_length: 13,
+  complete?: true,
+  raw: "HTTP/1.0 200 OK..."
+}
+```
+
+Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly from TCP payloads.
 ```
 
 ### Header
@@ -294,4 +348,3 @@ MIT License - See [LICENSE](LICENSE) for details.
 - Built with [Rustler](https://github.com/rusterlium/rustler)
 - Uses [pcap-file](https://github.com/courvoif/pcap-file) Rust crate
 - Inspired by [Explorer](https://github.com/elixir-explorer/explorer)
-

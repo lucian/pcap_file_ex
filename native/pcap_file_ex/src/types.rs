@@ -18,6 +18,7 @@ pub struct PacketMap {
     pub timestamp_nanos: u32,
     pub orig_len: u32,
     pub data: Vec<u8>,
+    pub datalink: String,
 }
 
 pub fn pcap_header_to_map(header: &PcapHeader) -> HeaderMap {
@@ -31,16 +32,17 @@ pub fn pcap_header_to_map(header: &PcapHeader) -> HeaderMap {
     }
 }
 
-pub fn pcap_packet_to_map(packet: PcapPacket) -> PacketMap {
+pub fn pcap_packet_to_map(packet: PcapPacket, datalink: &DataLink) -> PacketMap {
     PacketMap {
         timestamp_secs: packet.timestamp.as_secs(),
         timestamp_nanos: packet.timestamp.subsec_nanos(),
         orig_len: packet.orig_len,
         data: packet.data.into_owned(),
+        datalink: datalink_to_string(datalink),
     }
 }
 
-fn datalink_to_string(datalink: &DataLink) -> String {
+pub(crate) fn datalink_to_string(datalink: &DataLink) -> String {
     match datalink {
         DataLink::ETHERNET => "ethernet".to_string(),
         DataLink::RAW => "raw".to_string(),

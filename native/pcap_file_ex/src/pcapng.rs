@@ -1,4 +1,5 @@
-use crate::types::PacketMap;
+use crate::types::{datalink_to_string, PacketMap};
+use pcap_file::pcapng::blocks::Block;
 use pcap_file::pcapng::PcapNgReader;
 use rustler::{Error, ResourceArc};
 use std::fs::File;
@@ -33,25 +34,28 @@ pub fn pcapng_next_packet(
 
     // Iterate through blocks to find packet blocks
     loop {
-        match reader.next_block() {
-            Some(Ok(block)) => {
-                // Try to convert block to enhanced packet
-                if let Some(packet_block) = block.into_enhanced_packet() {
-                    // Directly construct PacketMap from EnhancedPacketBlock fields
-                    let packet_map = PacketMap {
-                        timestamp_secs: packet_block.timestamp.as_secs(),
-                        timestamp_nanos: packet_block.timestamp.subsec_nanos(),
-                        orig_len: packet_block.original_len,
-                        data: packet_block.data.into_owned(),
-                    };
+        let next = reader.next_block_and_state();
 
-                    return Ok(Some(packet_map));
-                }
+        match next {
+            Some(Ok((Block::EnhancedPacket(packet_block), state))) => {
+                let datalink = state
+                    .interfaces()
+                    .get(packet_block.interface_id as usize)
+                    .ok_or_else(|| Error::Term(Box::new("Missing interface description for packet".to_string())))?
+                    .linktype
+                    .clone();
 
-                // If not enhanced packet, continue to next block
-                // (we'll skip other block types for now)
-                continue;
+                let packet_map = PacketMap {
+                    timestamp_secs: packet_block.timestamp.as_secs(),
+                    timestamp_nanos: packet_block.timestamp.subsec_nanos(),
+                    orig_len: packet_block.original_len,
+                    data: packet_block.data.into_owned(),
+                    datalink: datalink_to_string(&datalink),
+                };
+
+                return Ok(Some(packet_map));
             }
+            Some(Ok((_block, _state))) => continue,
             Some(Err(e)) => return Err(Error::Term(Box::new(e.to_string()))),
             None => return Ok(None),
         }

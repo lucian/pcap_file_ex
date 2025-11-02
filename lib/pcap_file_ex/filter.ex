@@ -3,7 +3,7 @@ defmodule PcapFileEx.Filter do
   Packet filtering helpers and DSL for PCAP/PCAPNG files.
   """
 
-  alias PcapFileEx.Packet
+  alias PcapFileEx.{HTTP, Packet}
 
   @doc """
   Filters packets by size range.
@@ -55,6 +55,17 @@ defmodule PcapFileEx.Filter do
     Stream.filter(stream, fn packet ->
       byte_size(packet.data) < size
     end)
+  end
+
+  @doc """
+  Filters packets that contain the given protocol layer.
+
+  Supports link-layer (e.g., `:ether`), network-layer (e.g., `:ipv4`),
+  transport-layer (e.g., `:tcp`), and application protocols like `:http`.
+  """
+  @spec by_protocol(Enumerable.t(), atom()) :: Enumerable.t()
+  def by_protocol(stream, protocol) when is_atom(protocol) do
+    Stream.filter(stream, fn packet -> matches_protocol?(packet, protocol) end)
   end
 
   @doc """
@@ -223,4 +234,48 @@ defmodule PcapFileEx.Filter do
       end
     end)
   end
+
+  defp matches_protocol?(packet, protocol) do
+    case Packet.pkt_decode(packet) do
+      {:ok, {layers, payload}} ->
+        protocol_match?(List.wrap(layers), payload, protocol)
+
+      {:ok, layers} when is_list(layers) ->
+        protocol_match?(layers, "", protocol)
+
+      {:ok, other} ->
+        protocol_match?(List.wrap(other), "", protocol)
+
+      {:error, _} ->
+        false
+    end
+  end
+
+  defp protocol_match?(layers, payload, :http) do
+    has_tcp_layer = Enum.any?(layers, &layer_protocol?(&1, :tcp))
+
+    if has_tcp_layer do
+      case HTTP.decode(payload) do
+        {:ok, _} -> true
+        _ -> false
+      end
+    else
+      false
+    end
+  end
+
+  defp protocol_match?(layers, _payload, protocol) do
+    Enum.any?(layers, &layer_protocol?(&1, protocol))
+  end
+
+  defp layer_protocol?(layer, protocol) when is_tuple(layer) do
+    tuple_size(layer) > 0 and elem(layer, 0) == protocol
+  end
+
+  defp layer_protocol?(layer, protocol) when is_map(layer) do
+    Map.get(layer, :protocol) == protocol
+  end
+
+  defp layer_protocol?(layer, protocol), do: layer == protocol
+
 end

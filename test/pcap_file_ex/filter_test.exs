@@ -1,7 +1,7 @@
 defmodule PcapFileEx.FilterTest do
   use ExUnit.Case, async: true
 
-  alias PcapFileEx.Filter
+  alias PcapFileEx.{Filter, HTTP, Packet}
 
   @test_pcap_file "test/fixtures/sample.pcap"
 
@@ -52,6 +52,37 @@ defmodule PcapFileEx.FilterTest do
 
       Enum.each(filtered, fn packet ->
         assert byte_size(packet.data) < 70
+      end)
+    end
+  end
+
+  describe "by_protocol/2" do
+    test "filters packets by transport protocol", %{packets: packets} do
+      filtered =
+        packets
+        |> Filter.by_protocol(:tcp)
+        |> Enum.to_list()
+
+      assert length(filtered) > 0
+
+      Enum.each(filtered, fn packet ->
+        assert {:ok, {layers, _payload}} = Packet.pkt_decode(packet)
+        assert Enum.any?(List.wrap(layers), &tcp_layer?/1)
+      end)
+    end
+
+    test "filters HTTP packets", %{packets: packets} do
+      http_packets =
+        packets
+        |> Filter.by_protocol(:http)
+        |> Enum.to_list()
+
+      assert length(http_packets) > 0
+
+      Enum.each(http_packets, fn packet ->
+        assert {:ok, {layers, payload}} = Packet.pkt_decode(packet)
+        assert Enum.any?(List.wrap(layers), &tcp_layer?/1)
+        assert {:ok, %HTTP{}} = HTTP.decode(payload)
       end)
     end
   end
@@ -214,4 +245,10 @@ defmodule PcapFileEx.FilterTest do
       end)
     end
   end
+
+  defp tcp_layer?(layer) when is_tuple(layer) do
+    tuple_size(layer) > 0 and elem(layer, 0) == :tcp
+  end
+
+  defp tcp_layer?(layer), do: layer == :tcp
 end

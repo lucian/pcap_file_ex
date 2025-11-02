@@ -270,14 +270,41 @@ Represents a captured network packet.
 - `timestamp` - `DateTime.t()` - When the packet was captured
 - `orig_len` - `integer()` - Original packet length on wire
 - `data` - `binary()` - Raw packet data (may be truncated)
+- `datalink` - `String.t()` - Link layer type (e.g., `"ethernet"`, `"null"`)
 
 ```elixir
 %PcapFileEx.Packet{
   timestamp: ~U[2025-11-02 12:34:56.123456Z],
   orig_len: 1514,
-  data: <<0x00, 0x01, 0x02, ...>>
+  data: <<0x00, 0x01, 0x02, ...>>,
+  datalink: "ethernet"
 }
 ```
+
+> Loopback captures automatically drop the 4-byte pseudo-header and remap `datalink`
+> to `"ipv4"`/`"ipv6"`, so downstream protocol decoders can operate directly on the IP payload.
+> Use `PcapFileEx.Packet.pkt_decode/1` (or `pkt_decode!/1`) to forward packets to the [`pkt`](https://hex.pm/packages/pkt)
+> library with the proper link-type atom.
+
+#### `PcapFileEx.HTTP`
+
+Represents a parsed HTTP request or response extracted from a packet payload.
+
+```elixir
+%PcapFileEx.HTTP{
+  type: :response,
+  version: "1.0",
+  status_code: 200,
+  reason_phrase: "OK",
+  headers: %{"content-type" => "text/plain"},
+  body: "Hello, World!",
+  body_length: 13,
+  complete?: true,
+  raw: "HTTP/1.0 200 OK..."
+}
+```
+
+Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly.
 
 #### `PcapFileEx.Header`
 
@@ -326,6 +353,33 @@ packets_in_range =
     DateTime.compare(packet.timestamp, end_time) != :gt
   end)
   |> Enum.to_list()
+```
+
+### Filtering by Protocol
+
+```elixir
+# Extract HTTP application payloads
+http_packets =
+  PcapFileEx.stream("capture.pcapng")
+  |> PcapFileEx.Filter.by_protocol(:http)
+  |> Enum.to_list()
+
+# Inspect just the TCP handshake packets
+tcp_packets =
+  PcapFileEx.stream("capture.pcapng")
+  |> PcapFileEx.Filter.by_protocol(:tcp)
+  |> Enum.take(10)
+
+# Decode the HTTP packets using pkt once they are enumerated
+decoded =
+  PcapFileEx.stream("capture.pcapng")
+  |> PcapFileEx.Filter.by_protocol(:http)
+  |> Enum.map(&PcapFileEx.Packet.decode_http!/1)
+
+# Inspect a single HTTP response
+response = List.first(decoded)
+IO.inspect(response.headers["content-type"])
+IO.puts(response.body)
 ```
 
 ### Packet Statistics
