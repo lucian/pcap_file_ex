@@ -88,6 +88,7 @@ defmodule PcapFileEx.HTTP do
     case parse_start_line(start_line) do
       {:request, method, uri, version} ->
         headers = parse_headers(header_lines)
+
         {:ok,
          %__MODULE__{
            type: :request,
@@ -103,6 +104,7 @@ defmodule PcapFileEx.HTTP do
 
       {:response, version, status_code, reason} ->
         headers = parse_headers(header_lines)
+
         {:ok,
          %__MODULE__{
            type: :response,

@@ -370,7 +370,7 @@ tcp_packets =
   |> PcapFileEx.Filter.by_protocol(:tcp)
   |> Enum.take(10)
 
-# Decode the HTTP packets using pkt once they are enumerated
+# Decode the HTTP packets once they are enumerated
 decoded =
   PcapFileEx.stream("capture.pcapng")
   |> PcapFileEx.Filter.by_protocol(:http)
@@ -728,8 +728,8 @@ dumpcap -i any -w test.pcap -c 100 -P
 sudo tcpdump -i any -w test.pcap -c 100
 ```
 
-The included test script generates HTTP traffic on localhost and captures it in both
-PCAP and PCAPNG formats, giving you files with known packet contents for testing.
+The included test script generates both HTTP and UDP telemetry traffic on localhost
+and captures it in PCAP/PCAPNG formats, providing reproducible packet samples for testing.
 
 See `test/fixtures/README.md` for more details.
 

@@ -179,6 +179,7 @@ decoded_http =
   PcapFileEx.stream("capture.pcapng")
   |> PcapFileEx.Filter.by_protocol(:http)
   |> Enum.map(&PcapFileEx.Packet.decode_http!/1)
+
 ```
 
 ### Decode with the pkt library
@@ -232,6 +233,7 @@ Call `PcapFileEx.Packet.pkt_decode/1` or `pkt_decode!/1` to hand packets to the 
 ```
 
 Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly from TCP payloads.
+
 ```
 
 ### Header

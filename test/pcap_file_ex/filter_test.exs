@@ -179,15 +179,24 @@ defmodule PcapFileEx.FilterTest do
 
   describe "sample/2" do
     test "samples every Nth packet", %{packets: packets} do
+      total = length(packets)
+      expected = div(total + 9, 10)
+
       filtered =
         packets
         |> Filter.sample(10)
         |> Enum.to_list()
 
-      # Should be roughly 1/10th of packets (13 for 130 packets)
-      assert length(filtered) == 13
-      # Verify every 10th packet is selected
-      assert length(filtered) <= div(length(packets), 10) + 1
+      assert length(filtered) == expected
+
+      expected_packets =
+        packets
+        |> Enum.with_index()
+        |> Enum.filter(fn {_packet, idx} -> rem(idx, 10) == 0 end)
+        |> Enum.map(&elem(&1, 0))
+        |> Enum.take(expected)
+
+      assert filtered == expected_packets
     end
   end
 

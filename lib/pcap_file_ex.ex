@@ -125,11 +125,20 @@ defmodule PcapFileEx do
       {:ok, file} ->
         result =
           case IO.binread(file, 4) do
-            @pcap_magic_le -> :pcap
-            @pcap_magic_be -> :pcap
-            @pcapng_magic -> :pcapng
-            magic when is_binary(magic) -> {:error, "Unknown file format (magic: #{inspect(magic)})"}
-            :eof -> {:error, "File is empty"}
+            @pcap_magic_le ->
+              :pcap
+
+            @pcap_magic_be ->
+              :pcap
+
+            @pcapng_magic ->
+              :pcapng
+
+            magic when is_binary(magic) ->
+              {:error, "Unknown file format (magic: #{inspect(magic)})"}
+
+            :eof ->
+              {:error, "File is empty"}
           end
 
         File.close(file)

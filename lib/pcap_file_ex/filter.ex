@@ -277,5 +277,4 @@ defmodule PcapFileEx.Filter do
   end
 
   defp layer_protocol?(layer, protocol), do: layer == protocol
-
 end

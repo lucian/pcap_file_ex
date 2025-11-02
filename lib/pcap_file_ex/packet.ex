@@ -108,25 +108,7 @@ defmodule PcapFileEx.Packet do
   """
   @spec http_payload(t()) :: {:ok, binary()} | {:error, atom() | tuple()}
   def http_payload(%__MODULE__{} = packet) do
-    case pkt_decode(packet) do
-      {:ok, {_, payload}} when is_binary(payload) and payload != "" ->
-        {:ok, payload}
-
-      {:ok, {_, payload}} when is_binary(payload) ->
-        {:error, :empty_payload}
-
-      {:ok, payload} when is_binary(payload) and payload != "" ->
-        {:ok, payload}
-
-      {:ok, payload} when is_binary(payload) ->
-        {:error, :empty_payload}
-
-      {:error, _} = error ->
-        error
-
-      other ->
-        {:error, {:unexpected_decode_result, other}}
-    end
+    extract_payload(packet, :tcp)
   end
 
   @doc """
@@ -149,4 +131,51 @@ defmodule PcapFileEx.Packet do
       {:error, reason} -> raise RuntimeError, "http decode failed: #{inspect(reason)}"
     end
   end
+
+  @doc """
+  Extracts the UDP payload from the packet.
+  """
+  @spec udp_payload(t()) :: {:ok, binary()} | {:error, atom() | tuple()}
+  def udp_payload(%__MODULE__{} = packet) do
+    extract_payload(packet, :udp)
+  end
+
+  defp extract_payload(packet, required_protocol) do
+    case pkt_decode(packet) do
+      {:ok, {layers, payload}} when is_binary(payload) ->
+        layers_list = List.wrap(layers)
+
+        if has_protocol?(layers_list, required_protocol) do
+          payload_result(payload)
+        else
+          {:error, {:protocol_not_found, required_protocol}}
+        end
+
+      {:ok, payload} when is_binary(payload) ->
+        payload_result(payload)
+
+      {:error, _} = error ->
+        error
+
+      other ->
+        {:error, {:unexpected_decode_result, other}}
+    end
+  end
+
+  defp payload_result(payload) when payload != "", do: {:ok, payload}
+  defp payload_result(_payload), do: {:error, :empty_payload}
+
+  defp has_protocol?(layers, protocol) do
+    Enum.any?(layers, &layer_protocol?(&1, protocol))
+  end
+
+  defp layer_protocol?(layer, protocol) when is_tuple(layer) do
+    tuple_size(layer) > 0 and elem(layer, 0) == protocol
+  end
+
+  defp layer_protocol?(layer, protocol) when is_map(layer) do
+    Map.get(layer, :protocol) == protocol
+  end
+
+  defp layer_protocol?(layer, protocol), do: layer == protocol
 end

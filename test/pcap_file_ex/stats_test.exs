@@ -6,11 +6,23 @@ defmodule PcapFileEx.StatsTest do
   @test_pcap_file "test/fixtures/sample.pcap"
   @test_pcapng_file "test/fixtures/sample.pcapng"
 
+  setup_all do
+    {:ok, pcap_packets} = PcapFileEx.read_all(@test_pcap_file)
+    {:ok, pcapng_packets} = PcapFileEx.read_all(@test_pcapng_file)
+
+    %{
+      pcap_packets: pcap_packets,
+      pcapng_packets: pcapng_packets,
+      pcap_count: length(pcap_packets),
+      pcapng_count: length(pcapng_packets)
+    }
+  end
+
   describe "compute/1" do
-    test "computes statistics for PCAP file" do
+    test "computes statistics for PCAP file", %{pcap_count: expected_count} do
       assert {:ok, stats} = Stats.compute(@test_pcap_file)
 
-      assert stats.packet_count == 130
+      assert stats.packet_count == expected_count
       assert stats.total_bytes > 0
       assert stats.min_packet_size > 0
       assert stats.max_packet_size > stats.min_packet_size
@@ -20,10 +32,10 @@ defmodule PcapFileEx.StatsTest do
       assert stats.duration_seconds >= 0
     end
 
-    test "computes statistics for PCAPNG file" do
+    test "computes statistics for PCAPNG file", %{pcapng_count: expected_count} do
       assert {:ok, stats} = Stats.compute(@test_pcapng_file)
 
-      assert stats.packet_count == 130
+      assert stats.packet_count == expected_count
       assert stats.total_bytes > 0
       assert is_float(stats.avg_packet_size)
     end
@@ -34,11 +46,13 @@ defmodule PcapFileEx.StatsTest do
   end
 
   describe "compute_from_packets/1" do
-    test "computes statistics from packet list" do
-      {:ok, packets} = PcapFileEx.read_all(@test_pcap_file)
+    test "computes statistics from packet list", %{
+      pcap_packets: packets,
+      pcap_count: expected_count
+    } do
       stats = Stats.compute_from_packets(packets)
 
-      assert stats.packet_count == 130
+      assert stats.packet_count == expected_count
       assert stats.total_bytes > 0
     end
 
@@ -53,14 +67,14 @@ defmodule PcapFileEx.StatsTest do
   end
 
   describe "packet_count/1" do
-    test "counts packets in PCAP file" do
+    test "counts packets in PCAP file", %{pcap_count: expected_count} do
       assert {:ok, count} = Stats.packet_count(@test_pcap_file)
-      assert count == 130
+      assert count == expected_count
     end
 
-    test "counts packets in PCAPNG file" do
+    test "counts packets in PCAPNG file", %{pcapng_count: expected_count} do
       assert {:ok, count} = Stats.packet_count(@test_pcapng_file)
-      assert count == 130
+      assert count == expected_count
     end
   end
 

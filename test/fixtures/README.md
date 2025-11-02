@@ -6,7 +6,7 @@ This directory contains PCAP and PCAPNG files for testing, along with scripts to
 
 ### Option 1: Automated Test Traffic Capture (Recommended)
 
-Generate a test capture file with known HTTP traffic:
+Generate a test capture file with known HTTP and UDP telemetry traffic:
 
 ```bash
 cd test/fixtures
@@ -16,9 +16,10 @@ chmod +x capture_test_traffic.sh
 
 This script:
 1. Starts a simple HTTP server on port 8899
-2. Starts dumpcap to capture traffic on loopback interface
-3. Makes HTTP requests with known content
-4. Stops capture and saves to `sample.pcapng`
+2. Starts a UDP telemetry server on port 8898
+3. Starts dumpcap to capture both TCP and UDP traffic on the loopback interface
+4. Generates HTTP requests and UDP telemetry messages
+5. Stops capture and saves to `sample.pcapng`
 
 ### Option 2: Manual Capture with dumpcap
 
@@ -44,7 +45,7 @@ sudo tcpdump -i any -w test/fixtures/sample.pcap -c 10
 
 ## Test Traffic Generator
 
-The included Python scripts generate predictable HTTP traffic:
+The included Python scripts generate predictable HTTP and UDP traffic:
 
 ### Start HTTP Server
 ```bash
@@ -60,6 +61,20 @@ python3 http_server.py [port]
 python3 http_client.py [port] [count]
 # Default port: 8899, count: 5
 # Makes HTTP GET requests to /hello and /json
+```
+
+### Start UDP Server
+```bash
+python3 udp_server.py [port]
+# Default port: 8898
+# Listens for JSON telemetry datagrams and responds with acknowledgements
+```
+
+### Run UDP Client
+```bash
+python3 udp_client.py [port] [count]
+# Default port: 8898, count: 5
+# Sends JSON telemetry messages and prints server responses
 ```
 
 ### Manual Capture Workflow
