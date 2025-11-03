@@ -28,6 +28,25 @@ class TestHTTPHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+    def do_POST(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length) if content_length else b""
+
+        if self.path == "/submit":
+            self.send_response(201)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            response = b'{"status": "accepted", "bytes": %d}' % len(body)
+            self.wfile.write(response)
+        elif self.path == "/echo":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def log_message(self, format, *args):
         """Suppress log messages."""
         pass

@@ -19,8 +19,27 @@ This script:
 1. Starts a simple HTTP server on port 8899
 2. Starts a UDP telemetry server on port 8898
 3. Starts dumpcap to capture both TCP and UDP traffic on the selected interfaces
-4. Generates HTTP requests and UDP telemetry messages
+4. Generates HTTP GET/JSON requests and UDP telemetry messages
 5. Stops capture and saves to `sample.pcapng` (plus `sample.pcap`); when run with `--interfaces ... --nanosecond` it also writes `sample_multi_nanosecond.pcapng`
+
+### Option 1b: High-volume Capture for Benchmarks
+
+Generate a large, multi-interface capture suitable for benchmarking:
+
+```bash
+cd test/fixtures
+chmod +x capture_heavy_traffic.sh
+./capture_heavy_traffic.sh --duration 120 --interfaces lo0,en0
+```
+
+Key features:
+1. Starts HTTP and UDP servers (configurable via `--http-port` / `--udp-port`)
+2. Runs concurrent HTTP load (GET `/hello`, GET `/json`, POST `/submit`) with configurable workers and payload sizes
+3. Generates high-rate UDP telemetry streams with adjustable payload sizes and target packet rate
+4. Captures traffic across one or more interfaces via `dumpcap`, requesting nanosecond timestamps when `--nanosecond` is set
+5. Produces `large_capture.pcapng` (and optionally `large_capture.pcap`) alongside load generator logs for reproducibility
+
+Logs from the HTTP/UDP load generators are written next to the capture file (`http_load.log`, `udp_load.log`) to record request/packet counts.
 
 ### Option 2: Manual Capture with dumpcap
 
@@ -61,7 +80,13 @@ python3 http_server.py [port]
 ```bash
 python3 http_client.py [port] [count]
 # Default port: 8899, count: 5
-# Makes HTTP GET requests to /hello and /json
+# Makes HTTP GET requests to /hello and /json plus POST /submit with binary payloads
+```
+
+### Run HTTP Load Generator
+```bash
+python3 http_load_client.py --duration 60 --workers 4 --payload-bytes 2048
+# Sustained concurrent GET/POST traffic, intended for large benchmark captures
 ```
 
 ### Start UDP Server
@@ -76,6 +101,12 @@ python3 udp_server.py [port]
 python3 udp_client.py [port] [count]
 # Default port: 8898, count: 5
 # Sends JSON telemetry messages and prints server responses
+```
+
+### Run UDP Load Generator
+```bash
+python3 udp_load_client.py --duration 60 --rate 800 --payload-bytes 512
+# Generates high-rate UDP telemetry without waiting for responses
 ```
 
 ### Manual Capture Workflow

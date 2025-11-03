@@ -393,6 +393,15 @@ This generates:
 
 Both files contain the same HTTP traffic for consistent testing.
 
+For large benchmark datasets that mix TCP and UDP across multiple interfaces:
+
+```bash
+cd test/fixtures
+./capture_heavy_traffic.sh --duration 120 --interfaces lo0,en0
+```
+
+This produces `large_capture.pcapng` (and optionally `large_capture.pcap`) plus logs detailing the generated HTTP/UDP load.
+
 Or use `dumpcap` directly:
 
 ```bash
@@ -404,6 +413,27 @@ dumpcap -i any -w capture.pcap -c 100 -P
 ```
 
 See [test/fixtures/README.md](test/fixtures/README.md) for more details.
+
+## Benchmarks
+
+Benchee benchmarks quantify parsing throughput (packets per second) and filter performance.
+
+1. Generate a large capture (see `capture_heavy_traffic.sh` above) or provide your own path.
+2. Install dependencies: `mix deps.get`
+3. Run the benchmarks:
+
+```bash
+mix run bench/pcap_parsing.exs
+# or specify a custom capture
+PCAP_BENCH_FILE=/path/to/capture.pcapng mix run bench/pcap_parsing.exs
+```
+
+Benchmarks cover:
+- Streaming parse throughput with and without automatic decoder attachment
+- UDP-only filtering performance
+- HTTP POST filtering using application-level decoding
+
+Benchee reports iterations-per-second (IPS), average/median runtimes, and memory usage for each scenario. Adjust the capture size, duration, or Benchee options inside `bench/pcap_parsing.exs` to explore additional workloads.
 
 ## Documentation
 
