@@ -3,7 +3,7 @@ defmodule PcapFileEx.Packet do
   Represents a captured network packet.
   """
 
-  alias PcapFileEx.{DecoderRegistry, Endpoint, HTTP}
+  alias PcapFileEx.{DecoderRegistry, Endpoint, HTTP, Interface}
 
   @loopback_ipv6_families [10, 23, 24, 28, 30]
   @pkt_protocol_map %{
@@ -24,6 +24,9 @@ defmodule PcapFileEx.Packet do
           orig_len: non_neg_integer(),
           data: binary(),
           datalink: String.t() | nil,
+          timestamp_resolution: Interface.timestamp_resolution() | nil,
+          interface_id: non_neg_integer() | nil,
+          interface: Interface.t() | nil,
           protocols: [atom()],
           protocol: atom() | nil,
           src: Endpoint.t() | nil,
@@ -40,6 +43,9 @@ defmodule PcapFileEx.Packet do
     :orig_len,
     :data,
     :datalink,
+    :timestamp_resolution,
+    :interface_id,
+    :interface,
     :protocols,
     :protocol,
     :src,
@@ -61,12 +67,18 @@ defmodule PcapFileEx.Packet do
     {data, normalized_datalink} = normalize_loopback(base_data, datalink)
     {protocols, src, dst, layers, payload} = extract_metadata(data, normalized_datalink)
     protocol = List.last(protocols)
+    timestamp_resolution = map |> Map.get(:timestamp_resolution) |> resolution_from_value()
+    interface_map = map |> Map.get(:interface) |> interface_from_value()
+    interface_id = Map.get(map, :interface_id)
 
     %__MODULE__{
       timestamp: timestamp,
       orig_len: map.orig_len,
       data: data,
       datalink: normalized_datalink,
+      timestamp_resolution: timestamp_resolution,
+      interface_id: interface_id,
+      interface: interface_map,
       protocols: protocols,
       protocol: protocol,
       src: src,
@@ -95,6 +107,17 @@ defmodule PcapFileEx.Packet do
   end
 
   defp normalize_loopback(data, datalink), do: {data, datalink}
+
+  defp resolution_from_value(nil), do: nil
+  defp resolution_from_value("nanosecond"), do: :nanosecond
+  defp resolution_from_value("microsecond"), do: :microsecond
+  defp resolution_from_value("millisecond"), do: :millisecond
+  defp resolution_from_value("second"), do: :second
+  defp resolution_from_value(_), do: :unknown
+
+  defp interface_from_value(nil), do: nil
+  defp interface_from_value(map) when is_map(map), do: Interface.from_map(map)
+  defp interface_from_value(_), do: nil
 
   defp family_to_datalink(2), do: "ipv4"
   defp family_to_datalink(family) when family in @loopback_ipv6_families, do: "ipv6"

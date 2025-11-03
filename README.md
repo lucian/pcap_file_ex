@@ -10,6 +10,7 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **Simple API** - Easy-to-use functions for common tasks
 - ✅ **PCAP Support** - Read legacy PCAP format files
 - ✅ **PCAPNG Support** - Read next-generation PCAPNG format files
+- ✅ **Interface Metadata** - Surface interface descriptors and timestamp resolution from PCAPNG captures
 - ✅ **Auto-Detection** - Automatic format detection based on magic numbers
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
@@ -51,6 +52,9 @@ mix compile
 Enum.each(packets, fn packet ->
   IO.puts("#{packet.timestamp}: #{byte_size(packet.data)} bytes")
 end)
+
+# Opt out of automatic decoding when you only need raw payloads
+{:ok, raw_packets} = PcapFileEx.read_all("capture.pcapng", decode: false)
 ```
 
 ### Stream packets (recommended for large files)
@@ -64,6 +68,11 @@ PcapFileEx.stream("large_capture.pcap")
 
 PcapFileEx.stream("large_capture.pcapng")
 |> Enum.count()
+
+# Disable automatic decoder attachment for performance-sensitive pipelines
+PcapFileEx.stream("large_capture.pcapng", decode: false)
+|> Stream.map(&byte_size(&1.data))
+|> Enum.sum()
 ```
 
 ### Manual control
@@ -83,6 +92,18 @@ IO.inspect(packet.orig_len)
 # Close when done
 PcapFileEx.Pcap.close(reader)
 ```
+
+### Inspect PCAPNG interfaces
+
+```elixir
+{:ok, reader} = PcapFileEx.open("capture.pcapng")
+{:ok, interfaces} = PcapFileEx.PcapNg.interfaces(reader)
+Enum.each(interfaces, fn iface ->
+  IO.puts("#{iface.id}: #{iface.name || iface.linktype} (#{iface.timestamp_resolution})")
+end)
+```
+
+Each packet from a PCAPNG capture also carries `interface_id`, `interface`, and `timestamp_resolution` fields so you can attribute traffic to specific capture interfaces.
 
 ## Examples
 
@@ -271,8 +292,9 @@ Discover supported protocol atoms via `PcapFileEx.Packet.known_protocols/0`. Use
 `PcapFileEx.Packet.attach_decoded/1` to stash decoded payloads back on the packet
 struct, or call `PcapFileEx.Packet.decode_registered!/1` to fetch them directly.
 
-> Note: Payloads are not decoded automatically—use helpers like `PcapFileEx.Packet.decode_http/1`
-> (or custom decoders) when you need structured data.
+> Packets are decoded automatically using registered decoders. Pass `decode: false`
+> to `PcapFileEx.read_all/2` or `PcapFileEx.stream/2` when you only need raw payloads
+> without attaching decoded metadata.
 
 Pattern matching on endpoints is now straightforward:
 

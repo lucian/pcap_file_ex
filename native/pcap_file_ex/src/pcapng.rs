@@ -1,4 +1,4 @@
-use crate::types::{datalink_to_string, PacketMap};
+use crate::types::{interface_to_map, InterfaceMap, PacketMap};
 use pcap_file::pcapng::blocks::Block;
 use pcap_file::pcapng::PcapNgReader;
 use rustler::{Error, ResourceArc};
@@ -27,6 +27,22 @@ pub fn pcapng_close(_resource: ResourceArc<PcapNgReaderResource>) -> rustler::ty
 }
 
 #[rustler::nif]
+pub fn pcapng_interfaces(
+    resource: ResourceArc<PcapNgReaderResource>,
+) -> Result<Vec<InterfaceMap>, Error> {
+    let reader = resource.reader.lock().unwrap();
+    let mut interfaces = Vec::with_capacity(reader.interfaces().len());
+
+    for (idx, interface) in reader.interfaces().iter().enumerate() {
+        let interface_map = interface_to_map(idx as u32, interface)
+            .map_err(|e| Error::Term(Box::new(e.to_string())))?;
+        interfaces.push(interface_map);
+    }
+
+    Ok(interfaces)
+}
+
+#[rustler::nif]
 pub fn pcapng_next_packet(
     resource: ResourceArc<PcapNgReaderResource>,
 ) -> Result<Option<PacketMap>, Error> {
@@ -38,19 +54,26 @@ pub fn pcapng_next_packet(
 
         match next {
             Some(Ok((Block::EnhancedPacket(packet_block), state))) => {
-                let datalink = state
+                let interface = state
                     .interfaces()
                     .get(packet_block.interface_id as usize)
                     .ok_or_else(|| Error::Term(Box::new("Missing interface description for packet".to_string())))?
-                    .linktype
                     .clone();
+
+                let interface_map = interface_to_map(packet_block.interface_id, &interface)
+                    .map_err(|e| Error::Term(Box::new(e.to_string())))?;
+                let datalink = interface_map.linktype.clone();
+                let timestamp_resolution = Some(interface_map.timestamp_resolution.clone());
 
                 let packet_map = PacketMap {
                     timestamp_secs: packet_block.timestamp.as_secs(),
                     timestamp_nanos: packet_block.timestamp.subsec_nanos(),
                     orig_len: packet_block.original_len,
                     data: packet_block.data.into_owned(),
-                    datalink: datalink_to_string(&datalink),
+                    datalink,
+                    timestamp_resolution,
+                    interface_id: Some(packet_block.interface_id),
+                    interface: Some(interface_map),
                 };
 
                 return Ok(Some(packet_map));

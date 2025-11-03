@@ -3,7 +3,7 @@ defmodule PcapFileEx.PcapNg do
   Reader for PCAPNG (next-generation) format files.
   """
 
-  alias PcapFileEx.{Native, Packet}
+  alias PcapFileEx.{Interface, Native, Packet}
 
   @type t :: %__MODULE__{
           reference: reference(),
@@ -85,6 +85,23 @@ defmodule PcapFileEx.PcapNg do
       packets = read_all_packets(reader, [])
       close(reader)
       {:ok, Enum.reverse(packets)}
+    end
+  end
+
+  @doc """
+  Returns metadata for all interfaces discovered in the PCAPNG file.
+
+  The interface list is populated lazily as blocks are encountered during reads.
+  Calling `next_packet/1` at least once ensures interface metadata is available.
+  """
+  @spec interfaces(t()) :: {:ok, [Interface.t()]} | {:error, String.t()}
+  def interfaces(%__MODULE__{reference: reference}) do
+    case Native.pcapng_interfaces(reference) do
+      {:error, reason} ->
+        {:error, reason}
+
+      interfaces when is_list(interfaces) ->
+        {:ok, Enum.map(interfaces, &Interface.from_map/1)}
     end
   end
 

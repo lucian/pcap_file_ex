@@ -12,14 +12,15 @@ Generate a test capture file with known HTTP and UDP telemetry traffic:
 cd test/fixtures
 chmod +x capture_test_traffic.sh
 ./capture_test_traffic.sh sample.pcapng
+./capture_test_traffic.sh --interfaces lo0,en0 --nanosecond
 ```
 
 This script:
 1. Starts a simple HTTP server on port 8899
 2. Starts a UDP telemetry server on port 8898
-3. Starts dumpcap to capture both TCP and UDP traffic on the loopback interface
+3. Starts dumpcap to capture both TCP and UDP traffic on the selected interfaces
 4. Generates HTTP requests and UDP telemetry messages
-5. Stops capture and saves to `sample.pcapng`
+5. Stops capture and saves to `sample.pcapng` (plus `sample.pcap`); when run with `--interfaces ... --nanosecond` it also writes `sample_multi_nanosecond.pcapng`
 
 ### Option 2: Manual Capture with dumpcap
 

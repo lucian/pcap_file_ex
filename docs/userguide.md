@@ -144,6 +144,9 @@ Reads all packets from a PCAP or PCAPNG file into memory with automatic format d
 {:ok, packets} = PcapFileEx.read_all("small.pcap")
 {:ok, packets} = PcapFileEx.read_all("small.pcapng")
 IO.puts("Read #{length(packets)} packets")
+
+# Skip automatic decoder attachment when only raw payloads are needed
+{:ok, raw_packets} = PcapFileEx.read_all("small.pcapng", decode: false)
 ```
 
 #### `stream(path)`
@@ -162,6 +165,11 @@ packet_count =
 packet_count =
   PcapFileEx.stream("huge.pcapng")
   |> Enum.count()
+
+payload_bytes =
+  PcapFileEx.stream("huge.pcapng", decode: false)
+  |> Stream.map(&byte_size(&1.data))
+  |> Enum.sum()
 ```
 
 ### Reader Modules
@@ -271,6 +279,9 @@ Represents a captured network packet.
 - `orig_len` - `integer()` - Original packet length on wire
 - `data` - `binary()` - Raw packet data (may be truncated)
 - `datalink` - `String.t()` - Link layer type (e.g., `"ethernet"`, `"null"`)
+- `timestamp_resolution` - `atom()` - Resolution atom `:microsecond | :nanosecond | :millisecond | :second | :unknown`
+- `interface_id` - `integer() | nil` - Interface index for PCAPNG captures
+- `interface` - `%PcapFileEx.Interface{}` - Interface metadata when available
 - `protocols` - `[atom()]` - Ordered protocol stack decoded for the packet
 - `protocol` - `atom()` - Highest decoded protocol (e.g., `:tcp`, `:udp`)
 - `src` - `String.t()` - Source endpoint (IP or IP:port when available)
@@ -285,6 +296,9 @@ Represents a captured network packet.
   orig_len: 1514,
   data: <<0x00, 0x01, 0x02, ...>>,
   datalink: "ethernet",
+  timestamp_resolution: :microsecond,
+  interface_id: 0,
+  interface: %PcapFileEx.Interface{linktype: "ethernet", name: "lo0", snaplen: 262144, timestamp_resolution: :nanosecond, timestamp_offset_secs: 0},
   protocols: [:ether, :ipv4, :tcp, :http],
   protocol: :tcp,
   src: "127.0.0.1:55014",
@@ -300,9 +314,10 @@ Represents a captured network packet.
 > `protocols` captures the ordered decode stack (mirroring Wireshark columns) with `protocol`
 > set to its final entry. Use `PcapFileEx.Packet.known_protocols/0` to inspect supported atoms.
 > `PcapFileEx.Packet.pkt_decode/1` (or `pkt_decode!/1`) forwards packets to the [`pkt`](https://hex.pm/packages/pkt)
-> library with the proper link-type atom. Payloads are not decoded automatically—call
-> helpers such as `PcapFileEx.Packet.decode_http/1`, `decode_registered!/1`, or
-> `attach_decoded/1` when you need structured data cached on the packet.
+> library with the proper link-type atom. Registered decoders attach structured payloads
+> by default; pass `decode: false` to `PcapFileEx.read_all/2` or `PcapFileEx.stream/2` when
+> you want to skip that step. You can still call helpers such as `PcapFileEx.Packet.decode_http/1`,
+> `decode_registered!/1`, or `attach_decoded/1` manually whenever you need structured data.
 
 Pattern matching endpoints:
 
@@ -312,6 +327,22 @@ case packet.dst do
   _ -> :other
 end
 ```
+
+
+#### `PcapFileEx.Interface`
+
+Metadata about a capture interface discovered in a PCAPNG file. Populated for packets when the underlying capture exposes Interface Description Blocks.
+
+**Fields:**
+- `id` - `integer()` - Interface index
+- `name` - `String.t() | nil` - Friendly interface name
+- `description` - `String.t() | nil` - Optional description
+- `linktype` - `String.t()` - Link-layer type for packets on this interface
+- `snaplen` - `integer()` - Capture snapshot length for the interface
+- `timestamp_resolution` - `atom()` - Resolution atom `:microsecond | :nanosecond | :millisecond | :second | :unknown`
+- `timestamp_offset_secs` - `integer()` - Seconds offset applied to decoded timestamps
+
+`PcapFileEx.PcapNg.interfaces/1` returns this struct for every interface discovered in the capture. Packets also embed the matching interface metadata via the `interface` field when available.
 
 #### `PcapFileEx.HTTP`
 
@@ -831,6 +862,8 @@ For testing, you can generate PCAP and PCAPNG files with known content:
 # Using included test scripts (generates both formats)
 cd test/fixtures
 ./capture_test_traffic.sh
+# Multi-interface + nanosecond timestamps
+./capture_test_traffic.sh --interfaces lo0,en0 --nanosecond
 
 # Using dumpcap manually
 # PCAPNG format (default)
@@ -843,8 +876,7 @@ dumpcap -i any -w test.pcap -c 100 -P
 sudo tcpdump -i any -w test.pcap -c 100
 ```
 
-The included test script generates both HTTP and UDP telemetry traffic on localhost
-and captures it in PCAP/PCAPNG formats, providing reproducible packet samples for testing.
+The included test script generates both HTTP and UDP telemetry traffic on localhost and captures it in PCAP/PCAPNG formats, providing reproducible packet samples for testing. When run with `--interfaces ... --nanosecond`, it emits an additional `sample_multi_nanosecond.pcapng` fixture alongside the standard `sample.pcapng`/`sample.pcap` pair.
 
 See `test/fixtures/README.md` for more details.
 

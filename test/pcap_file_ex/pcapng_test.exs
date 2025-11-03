@@ -4,6 +4,7 @@ defmodule PcapFileEx.PcapNgTest do
   alias PcapFileEx.{Endpoint, Packet, PcapNg}
 
   @test_pcapng_file "test/fixtures/sample.pcapng"
+  @multi_interface_pcapng "test/fixtures/sample_multi_nanosecond.pcapng"
 
   describe "open/1" do
     test "opens a valid PCAPNG file" do
@@ -56,6 +57,12 @@ defmodule PcapFileEx.PcapNgTest do
         if packet.dst do
           assert %Endpoint{ip: ip} = packet.dst
           assert is_binary(ip)
+        end
+
+        assert packet.timestamp_resolution in [nil, :microsecond, :nanosecond, :unknown]
+
+        if packet.interface do
+          assert packet.interface_id == packet.interface.id
         end
 
         assert {:ok, decoded} = Packet.pkt_decode(packet)
@@ -174,6 +181,35 @@ defmodule PcapFileEx.PcapNgTest do
         last_timestamp = List.last(timestamps)
 
         assert DateTime.compare(last_timestamp, first_timestamp) in [:gt, :eq]
+      end
+    end
+  end
+
+  describe "interfaces/1" do
+    test "returns interface metadata for multi-interface captures" do
+      if File.exists?(@multi_interface_pcapng) do
+        {:ok, reader} = PcapNg.open(@multi_interface_pcapng)
+        assert {:ok, packet} = PcapNg.next_packet(reader)
+
+        assert is_integer(packet.interface_id)
+        assert packet.interface
+        assert packet.timestamp_resolution in [:microsecond, :nanosecond, :unknown]
+
+        assert {:ok, interfaces} = PcapNg.interfaces(reader)
+        assert length(interfaces) >= 2
+        assert Enum.any?(interfaces, &(&1.id == packet.interface_id))
+
+        matching = Enum.find(interfaces, &(&1.id == packet.interface_id))
+        refute is_nil(matching)
+        assert matching.linktype == packet.interface.linktype
+
+        PcapNg.close(reader)
+      else
+        IO.puts("\nSkipping multi-interface test - no test file at #{@multi_interface_pcapng}")
+
+        IO.puts(
+          "Generate one with: cd test/fixtures && ./capture_test_traffic.sh --interfaces lo0,en0 --nanosecond"
+        )
       end
     end
   end

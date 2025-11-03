@@ -41,7 +41,7 @@ defmodule PcapFileEx do
       {:ok, :pcap} = PcapFileEx.Validator.validate("capture.pcap")
   """
 
-  alias PcapFileEx.{Pcap, PcapNg, Stream}
+  alias PcapFileEx.{Packet, Pcap, PcapNg, Stream}
 
   # Magic numbers for file format detection
   @pcap_magic_le <<0xD4, 0xC3, 0xB2, 0xA1>>
@@ -83,12 +83,20 @@ defmodule PcapFileEx do
       {:ok, packets} = PcapFileEx.read_all("capture.pcap")
       {:ok, packets} = PcapFileEx.read_all("capture.pcapng")
   """
-  @spec read_all(Path.t()) :: {:ok, [PcapFileEx.Packet.t()]} | {:error, String.t()}
-  def read_all(path) when is_binary(path) do
-    case detect_format(path) do
-      :pcap -> Pcap.read_all(path)
-      :pcapng -> PcapNg.read_all(path)
-      {:error, reason} -> {:error, reason}
+  @spec read_all(Path.t(), keyword()) :: {:ok, [PcapFileEx.Packet.t()]} | {:error, String.t()}
+  def read_all(path, opts \\ []) when is_binary(path) do
+    decode? = Keyword.get(opts, :decode, true)
+
+    result =
+      case detect_format(path) do
+        :pcap -> Pcap.read_all(path)
+        :pcapng -> PcapNg.read_all(path)
+        {:error, reason} -> {:error, reason}
+      end
+
+    with {:ok, packets} <- result do
+      packets = maybe_attach_decoded(packets, decode?)
+      {:ok, packets}
     end
   end
 
@@ -108,12 +116,21 @@ defmodule PcapFileEx do
       |> Stream.take(10)
       |> Enum.to_list()
   """
-  @spec stream(Path.t()) :: Enumerable.t()
-  def stream(path) when is_binary(path) do
-    case detect_format(path) do
-      :pcap -> Stream.packets(path)
-      :pcapng -> stream_pcapng(path)
-      {:error, reason} -> raise "Failed to detect file format: #{reason}"
+  @spec stream(Path.t(), keyword()) :: Enumerable.t()
+  def stream(path, opts \\ []) when is_binary(path) do
+    decode? = Keyword.get(opts, :decode, true)
+
+    base_stream =
+      case detect_format(path) do
+        :pcap -> Stream.packets(path)
+        :pcapng -> stream_pcapng(path)
+        {:error, reason} -> raise "Failed to detect file format: #{reason}"
+      end
+
+    if decode? do
+      Elixir.Stream.map(base_stream, &Packet.attach_decoded/1)
+    else
+      base_stream
     end
   end
 
@@ -167,4 +184,7 @@ defmodule PcapFileEx do
       fn reader -> PcapNg.close(reader) end
     )
   end
+
+  defp maybe_attach_decoded(packets, true), do: Enum.map(packets, &Packet.attach_decoded/1)
+  defp maybe_attach_decoded(packets, false), do: packets
 end
