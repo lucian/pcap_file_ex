@@ -2,8 +2,8 @@
 """Concurrent HTTP load generator for test captures."""
 
 import argparse
-import http.client
 import os
+import socket
 import threading
 import time
 from collections import Counter
@@ -42,26 +42,71 @@ def parse_args():
     return parser.parse_args()
 
 
-def make_request(host, port, method, path, body=None, headers=None):
+def build_request(method, path, host, port, body, headers=None):
     headers = headers or {}
+
+    merged = {
+        "Host": f"{host}:{port}",
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
+
+    if body:
+        merged["Content-Length"] = str(len(body))
+        merged.setdefault("Content-Type", "application/octet-stream")
+
+    merged.update(headers)
+
+    header_blob = "\r\n".join(f"{k}: {v}" for k, v in merged.items())
+    request_line = f"{method} {path} HTTP/1.1"
+    return (f"{request_line}\r\n{header_blob}\r\n\r\n").encode("ascii") + body
+
+
+def make_request(host, port, method, path, body=None, headers=None):
+    payload = build_request(method, path, host, port, body or b"", headers)
     try:
-        with http.client.HTTPConnection(host, port, timeout=2) as conn:
-            conn.request(method, path, body=body, headers=headers)
-            response = conn.getresponse()
-            response.read()
-            return response.status
+        with socket.create_connection((host, port), timeout=2) as sock:
+            sock.sendall(payload)
+            response = sock.recv(2048)
+            if not response:
+                return None
+            status_line = response.split(b"\r\n", 1)[0].decode(errors="ignore")
+            parts = status_line.split(" ", 2)
+            if len(parts) >= 2 and parts[1].isdigit():
+                return int(parts[1])
+            return None
     except Exception:
         return None
 
 
-def worker(stop_event, host, port, payload, sleep_interval, counter):
+def worker(stop_event, host, port, get_payload, post_payload, sleep_interval, counter):
     while not stop_event.is_set():
-        if make_request(host, port, "GET", "/hello") == 200:
+        if (
+            make_request(
+                host,
+                port,
+                "GET",
+                "/hello",
+                body=get_payload,
+                headers={"Content-Type": "application/octet-stream"},
+            )
+            == 200
+        ):
             counter["GET /hello"] += 1
 
         time.sleep(sleep_interval)
 
-        if make_request(host, port, "GET", "/json") == 200:
+        if (
+            make_request(
+                host,
+                port,
+                "GET",
+                "/json",
+                body=get_payload,
+                headers={"Content-Type": "application/octet-stream"},
+            )
+            == 200
+        ):
             counter["GET /json"] += 1
 
         time.sleep(sleep_interval)
@@ -71,7 +116,7 @@ def worker(stop_event, host, port, payload, sleep_interval, counter):
             port,
             "POST",
             "/submit",
-            body=payload,
+            body=post_payload,
             headers={"Content-Type": "application/octet-stream"},
         )
         if status == 201:
@@ -82,7 +127,8 @@ def worker(stop_event, host, port, payload, sleep_interval, counter):
 
 def main():
     args = parse_args()
-    payload = os.urandom(args.payload_bytes)
+    post_payload = os.urandom(args.payload_bytes)
+    get_payload = post_payload[: max(1, args.payload_bytes // 2)]
 
     stop_event = threading.Event()
     counters = [Counter() for _ in range(args.workers)]
@@ -91,7 +137,15 @@ def main():
     for i in range(args.workers):
         thread = threading.Thread(
             target=worker,
-            args=(stop_event, args.host, args.port, payload, args.sleep, counters[i]),
+            args=(
+                stop_event,
+                args.host,
+                args.port,
+                get_payload,
+                post_payload,
+                args.sleep,
+                counters[i],
+            ),
             name=f"http-worker-{i}",
             daemon=True,
         )
@@ -100,7 +154,8 @@ def main():
 
     print(
         f"HTTP load generator running for {args.duration}s on "
-        f"{args.host}:{args.port} with {args.workers} workers"
+        f"{args.host}:{args.port} with {args.workers} workers "
+        f"(GET payload: {len(get_payload)} bytes, POST payload: {len(post_payload)} bytes)"
     )
 
     try:

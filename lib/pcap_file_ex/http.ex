@@ -18,7 +18,8 @@ defmodule PcapFileEx.HTTP do
             body: "",
             body_length: nil,
             complete?: true,
-            raw: ""
+            raw: "",
+            decoded_body: nil
 
   @type t :: %__MODULE__{
           type: :request | :response,
@@ -31,7 +32,8 @@ defmodule PcapFileEx.HTTP do
           body: binary(),
           body_length: non_neg_integer() | nil,
           complete?: boolean(),
-          raw: binary()
+          raw: binary(),
+          decoded_body: term()
         }
 
   @doc """
@@ -99,7 +101,8 @@ defmodule PcapFileEx.HTTP do
            body: body,
            body_length: parse_content_length(headers),
            complete?: body_complete?(headers, body),
-           raw: raw
+           raw: raw,
+           decoded_body: decode_body(body, headers)
          }}
 
       {:response, version, status_code, reason} ->
@@ -115,7 +118,8 @@ defmodule PcapFileEx.HTTP do
            body: body,
            body_length: parse_content_length(headers),
            complete?: body_complete?(headers, body),
-           raw: raw
+           raw: raw,
+           decoded_body: decode_body(body, headers)
          }}
 
       {:error, reason} ->
@@ -218,5 +222,70 @@ defmodule PcapFileEx.HTTP do
       nil -> true
       expected when is_integer(expected) -> byte_size(body) >= expected
     end
+  end
+
+  # Automatically decodes HTTP body based on content-type header and magic bytes.
+  #
+  # Supports:
+  # - Erlang Term Format (ETF) - starts with byte 131 (checked first)
+  # - JSON - content-type contains "json"
+  # - Form data - application/x-www-form-urlencoded
+  # - Text - content-type starts with "text/"
+  # - Raw binary for everything else
+  #
+  # Returns the decoded body or nil if empty.
+  @spec decode_body(binary(), map()) :: term()
+  defp decode_body(body, _headers) when body == "", do: nil
+
+  defp decode_body(body, headers) do
+    content_type = Map.get(headers, "content-type", "")
+
+    cond do
+      # Check for ETF format first (magic byte 131), regardless of content-type
+      is_etf?(body) ->
+        decode_etf(body)
+
+      String.contains?(content_type, "json") ->
+        decode_json(body)
+
+      String.starts_with?(content_type, "text/") ->
+        body
+
+      String.starts_with?(content_type, "application/x-www-form-urlencoded") ->
+        decode_form_urlencoded(body)
+
+      true ->
+        # Return raw binary for unknown types
+        body
+    end
+  end
+
+  defp is_etf?(<<131, _rest::binary>>), do: true
+  defp is_etf?(_), do: false
+
+  defp decode_etf(body) do
+    :erlang.binary_to_term(body)
+  rescue
+    _ -> body
+  end
+
+  defp decode_json(body) do
+    if Code.ensure_loaded?(Jason) do
+      case Jason.decode(body) do
+        {:ok, decoded} -> decoded
+        {:error, _} -> body
+      end
+    else
+      # Jason not available, return raw body
+      body
+    end
+  rescue
+    _ -> body
+  end
+
+  defp decode_form_urlencoded(body) do
+    URI.decode_query(body)
+  rescue
+    _ -> body
   end
 end

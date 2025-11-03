@@ -25,6 +25,7 @@ defmodule PcapFileEx.MixProject do
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
       {:rustler, "~> 0.37.1"},
       {:pkt, "~> 0.6.0"},
+      {:jason, "~> 1.4", optional: true},
       {:benchee, "~> 1.3", only: [:dev, :test], runtime: false}
     ]
   end

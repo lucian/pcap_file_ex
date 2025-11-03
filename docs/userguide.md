@@ -354,15 +354,28 @@ Represents a parsed HTTP request or response extracted from a packet payload.
   version: "1.0",
   status_code: 200,
   reason_phrase: "OK",
-  headers: %{"content-type" => "text/plain"},
-  body: "Hello, World!",
-  body_length: 13,
+  headers: %{"content-type" => "application/json"},
+  body: "{\"message\":\"Hello, World!\"}",
+  body_length: 28,
   complete?: true,
-  raw: "HTTP/1.0 200 OK..."
+  raw: "HTTP/1.0 200 OK...",
+  decoded_body: %{"message" => "Hello, World!"}  # Automatically decoded!
 }
 ```
 
 Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly.
+
+**Automatic Body Decoding**
+
+The `decoded_body` field is automatically populated based on the Content-Type header and magic bytes:
+
+- **Erlang Term Format (ETF)** - Detected by magic byte `131`, decoded with `:erlang.binary_to_term/1`
+- **JSON** - When `Content-Type` contains "json", decoded with Jason (if available)
+- **Form data** - `application/x-www-form-urlencoded` decoded to a map
+- **Text** - `text/*` content-types returned as-is
+- **Binary** - Unknown types returned as raw binary
+
+The decoding is safe and falls back to raw binary if decoding fails. The `decoded_body` field is `nil` for empty bodies.
 
 #### `PcapFileEx.Header`
 
@@ -527,6 +540,154 @@ PcapFileEx.DisplayFilter.FieldRegistry.fields()
 
 For examples of protocol heuristics see Wireshark's
 [Lua dissector tutorial](https://www.wireshark.org/docs/wsdg_html_chunked/wslua_dissector_example.html).
+
+### HTTP Body Auto-Decoding
+
+PcapFileEx automatically decodes HTTP message bodies based on Content-Type headers and magic bytes. This eliminates the need for manual decoding and simplifies HTTP traffic analysis.
+
+#### Supported Formats
+
+| Format | Detection Method | Output Type |
+|--------|------------------|-------------|
+| Erlang Term Format (ETF) | Magic byte `131` | Any Erlang term (map, list, tuple, etc.) |
+| JSON | `Content-Type` contains "json" | Map or List |
+| Form URL Encoded | `Content-Type: application/x-www-form-urlencoded` | Map |
+| Plain Text | `Content-Type: text/*` | String (binary) |
+| Unknown/Binary | Default | Raw binary |
+
+#### Basic Usage with TCP Reassembly
+
+```elixir
+# Stream HTTP messages - bodies are automatically decoded
+"capture.pcap"
+|> PcapFileEx.TCP.stream_http_messages(types: :all)
+|> Enum.each(fn msg ->
+  IO.puts "#{msg.type}: #{msg.http.method || msg.http.status_code}"
+
+  # Access decoded body directly
+  case msg.http.decoded_body do
+    map when is_map(map) ->
+      IO.inspect(map, label: "JSON/Form data")
+    term when is_tuple(term) ->
+      IO.inspect(term, label: "ETF term")
+    text when is_binary(text) ->
+      IO.puts("Text: #{text}")
+    nil ->
+      IO.puts("Empty body")
+  end
+end)
+```
+
+#### Filtering by Decoded Content
+
+```elixir
+# Filter JSON responses by decoded field values
+error_responses = "capture.pcap"
+|> PcapFileEx.TCP.stream_http_responses()
+|> Stream.filter(fn msg ->
+  is_map(msg.http.decoded_body) and
+  msg.http.decoded_body["status"] == "error"
+end)
+|> Enum.to_list()
+
+# Find specific user IDs in request bodies
+user_requests = "capture.pcap"
+|> PcapFileEx.TCP.stream_http_requests()
+|> Stream.filter(fn msg ->
+  match?(%{"user_id" => id} when id > 1000, msg.http.decoded_body)
+end)
+|> Enum.to_list()
+```
+
+#### Working with Erlang Terms
+
+```elixir
+# Inspect ETF-encoded messages (common in Elixir/Erlang applications)
+"capture.pcap"
+|> PcapFileEx.TCP.stream_http_requests()
+|> Stream.filter(fn msg ->
+  # ETF data is decoded to Erlang terms (not binary)
+  not is_binary(msg.http.decoded_body) and not is_nil(msg.http.decoded_body)
+end)
+|> Enum.each(fn msg ->
+  IO.puts "ETF Message:"
+  IO.inspect(msg.http.decoded_body, limit: :infinity)
+end)
+```
+
+#### Pattern Matching on Decoded Data
+
+```elixir
+# Pattern match directly on decoded JSON
+"capture.pcap"
+|> PcapFileEx.TCP.stream_http_messages()
+|> Enum.each(fn
+  %{http: %{decoded_body: %{"action" => "login", "username" => user}}} ->
+    IO.puts "Login attempt: #{user}"
+
+  %{http: %{decoded_body: %{"action" => "logout"}}} ->
+    IO.puts "Logout"
+
+  _ ->
+    :skip
+end)
+```
+
+#### Error Handling
+
+All decoding is safe - if decoding fails, the raw binary is preserved:
+
+```elixir
+# Invalid JSON or corrupted ETF returns raw binary
+msg = %PcapFileEx.HTTP{
+  body: "{invalid json",
+  headers: %{"content-type" => "application/json"},
+  decoded_body: "{invalid json"  # Falls back to raw
+}
+
+# You can check if decoding succeeded
+case msg.http.decoded_body do
+  map when is_map(map) ->
+    # Successfully decoded
+    IO.inspect(map)
+  binary when is_binary(binary) ->
+    # Decoding failed or plain text
+    IO.puts("Raw body: #{binary}")
+end
+```
+
+#### Combining with Other Filters
+
+```elixir
+# Find large JSON responses with specific status
+"capture.pcap"
+|> PcapFileEx.TCP.stream_http_responses()
+|> Stream.filter(fn msg ->
+  msg.http.status_code == 200 and
+  msg.http.body_length > 10_000 and
+  is_map(msg.http.decoded_body)
+end)
+|> Enum.each(fn msg ->
+  IO.puts "Large JSON response: #{msg.http.body_length} bytes"
+  IO.inspect(Map.keys(msg.http.decoded_body), label: "Keys")
+end)
+```
+
+#### Optional JSON Support
+
+JSON decoding requires the `jason` dependency. If Jason is not available, JSON bodies are returned as raw binary:
+
+```elixir
+# Add to mix.exs
+def deps do
+  [
+    {:pcap_file_ex, "~> 0.1.0"},
+    {:jason, "~> 1.4"}  # Optional, for JSON decoding
+  ]
+end
+```
+
+Without Jason, the library still works perfectly - JSON just won't be decoded automatically.
 
 ### Packet Statistics
 

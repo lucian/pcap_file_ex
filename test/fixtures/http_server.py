@@ -14,16 +14,30 @@ class TestHTTPHandler(http.server.SimpleHTTPRequestHandler):
     """Handler that responds to specific test requests."""
 
     def do_GET(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length) if content_length else b""
+
         if self.path == "/hello":
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
+            if body:
+                self.send_header("X-Request-Body-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(b"Hello, World!")
+            payload = b"Hello, World!"
+            if body:
+                payload += b"\nReceived %d bytes" % len(body)
+            self.wfile.write(payload)
         elif self.path == "/json":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            if body:
+                self.send_header("X-Request-Body-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(b'{"message": "test", "status": "ok"}')
+            response = b'{"message": "test", "status": "ok"'
+            if body:
+                response += b', "request_body_bytes": %d' % len(body)
+            response += b"}"
+            self.wfile.write(response)
         else:
             self.send_response(404)
             self.end_headers()

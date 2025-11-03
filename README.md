@@ -12,6 +12,8 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **PCAPNG Support** - Read next-generation PCAPNG format files
 - ✅ **Interface Metadata** - Surface interface descriptors and timestamp resolution from PCAPNG captures
 - ✅ **Auto-Detection** - Automatic format detection based on magic numbers
+- ✅ **TCP Reassembly** - Reassemble HTTP messages split across multiple TCP packets
+- ✅ **HTTP Body Decoding** - Automatic decoding of JSON, ETF, form data, and text bodies
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
 - ✅ **Validation** - File format validation and accessibility checks
@@ -197,9 +199,9 @@ tcp_handshakes =
 
 # Decode filtered packets into structured HTTP messages
 decoded_http =
-  PcapFileEx.stream("capture.pcapng")
-  |> PcapFileEx.Filter.by_protocol(:http)
-  |> Enum.map(&PcapFileEx.Packet.decode_http!/1)
+PcapFileEx.stream("capture.pcapng")
+|> PcapFileEx.Filter.by_protocol(:http)
+|> Enum.map(&PcapFileEx.Packet.decode_http!/1)
 
 # Keep packet metadata + decoded payloads
 packets_with_decoded =
@@ -345,7 +347,39 @@ Remove a decoder with `PcapFileEx.DecoderRegistry.unregister/1`. Inspiration for
 analysis logic can be taken from Wireshark dissectors (see the
 [Lua dissector example](https://www.wireshark.org/docs/wsdg_html_chunked/wslua_dissector_example.html)).
 
-### HTTP Message
+### Reassemble HTTP streams
+
+```elixir
+# Lazily reconstruct HTTP requests with payloads that span multiple packets
+PcapFileEx.TCP.stream_http_messages("captures/fixture.pcapng", types: [:request])
+|> Enum.each(fn message ->
+  IO.puts("#{message.http.method} #{message.http.uri} -> #{byte_size(message.http.body)} bytes")
+
+  # Access automatically decoded body
+  case message.http.decoded_body do
+    map when is_map(map) -> IO.inspect(map, label: "JSON/ETF data")
+    text when is_binary(text) -> IO.puts("Text: #{text}")
+    nil -> IO.puts("Empty body")
+  end
+end)
+
+# Responses are available too
+PcapFileEx.TCP.stream_http_messages("captures/fixture.pcapng", types: [:response])
+|> Enum.take(3)
+
+# Filter by decoded content
+PcapFileEx.TCP.stream_http_messages("capture.pcapng")
+|> Stream.filter(fn msg ->
+  is_map(msg.http.decoded_body) and msg.http.decoded_body["status"] == "error"
+end)
+|> Enum.to_list()
+```
+
+The helper buffers TCP payloads per direction until the full HTTP message is
+assembled (based on `Content-Length` when present) and returns
+`%PcapFileEx.TCP.HTTPMessage{}` structs with the decoded `%PcapFileEx.HTTP{}` payload.
+
+### HTTP Message with Automatic Body Decoding
 
 ```elixir
 %PcapFileEx.HTTP{
@@ -353,12 +387,47 @@ analysis logic can be taken from Wireshark dissectors (see the
   version: "1.0",
   status_code: 200,
   reason_phrase: "OK",
-  headers: %{"content-type" => "text/plain", "server" => "SimpleHTTP/0.6 Python/3.13.5"},
-  body: "Hello, World!",
-  body_length: 13,
+  headers: %{"content-type" => "application/json", "server" => "SimpleHTTP/0.6 Python/3.13.5"},
+  body: "{\"message\":\"Hello, World!\"}",
+  body_length: 28,
   complete?: true,
-  raw: "HTTP/1.0 200 OK..."
+  raw: "HTTP/1.0 200 OK...",
+  decoded_body: %{"message" => "Hello, World!"}  # Automatically decoded!
 }
+```
+
+**Automatic Body Decoding**
+
+HTTP bodies are automatically decoded based on content-type and magic bytes:
+
+- **Erlang Term Format (ETF)** - Detected by magic byte `131`, decoded with `:erlang.binary_to_term/1`
+- **JSON** - When `Content-Type` contains "json", decoded with Jason (if available)
+- **Form data** - `application/x-www-form-urlencoded` decoded to a map
+- **Text** - `text/*` content-types returned as-is
+- **Binary** - Unknown types returned as raw binary
+
+If decoding fails (e.g., malformed JSON), the raw binary is preserved. The `decoded_body` field is `nil` for empty bodies.
+
+```elixir
+# Example: Filter JSON responses by decoded content
+"capture.pcapng"
+|> PcapFileEx.TCP.stream_http_responses()
+|> Stream.filter(fn msg ->
+  is_map(msg.http.decoded_body) and
+  Map.get(msg.http.decoded_body, "status") == "success"
+end)
+|> Enum.to_list()
+
+# Example: Inspect Erlang terms from ETF-encoded requests
+"capture.pcapng"
+|> PcapFileEx.TCP.stream_http_requests()
+|> Enum.each(fn msg ->
+  case msg.http.decoded_body do
+    term when not is_binary(term) ->
+      IO.inspect(term, label: "Decoded ETF term")
+    _ -> :skip
+  end
+end)
 ```
 
 Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly from TCP payloads.

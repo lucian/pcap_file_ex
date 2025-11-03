@@ -80,13 +80,15 @@ python3 http_server.py [port]
 ```bash
 python3 http_client.py [port] [count]
 # Default port: 8899, count: 5
-# Makes HTTP GET requests to /hello and /json plus POST /submit with binary payloads
+# Makes HTTP GET requests to /hello and /json (each with a small binary body)
+# plus POST /submit with larger binary payloads
 ```
 
 ### Run HTTP Load Generator
 ```bash
 python3 http_load_client.py --duration 60 --workers 4 --payload-bytes 2048
-# Sustained concurrent GET/POST traffic, intended for large benchmark captures
+# Sustained concurrent GET/POST traffic with request bodies,
+# intended for large benchmark captures
 ```
 
 ### Start UDP Server
