@@ -1,9 +1,9 @@
 defmodule PcapFileEx.DecoderRegistryTest do
   use ExUnit.Case, async: false
 
-  alias PcapFileEx.{DecoderRegistry, Packet}
+  alias PcapFileEx.{DecoderRegistry, DisplayFilter, Packet}
 
-  @payload ~s({"sensor":"alpha","value":21.5})
+  @payload ~s({"sensor":"alpha","value":21})
 
   setup do
     DecoderRegistry.unregister(:custom_json)
@@ -23,7 +23,11 @@ defmodule PcapFileEx.DecoderRegistryTest do
       end,
       decoder: fn payload ->
         {:ok, Jason.decode!(IO.iodata_to_binary(payload))}
-      end
+      end,
+      fields: [
+        %{id: "custom_json.value", type: :integer, extractor: fn decoded -> decoded["value"] end},
+        %{id: "custom_json.sensor", type: :string, extractor: fn decoded -> decoded["sensor"] end}
+      ]
     })
 
     packet = build_udp_packet(@payload)
@@ -31,6 +35,15 @@ defmodule PcapFileEx.DecoderRegistryTest do
     assert :custom_json in packet.protocols
     assert {:ok, {:custom_json, decoded}} = Packet.decode_registered(packet)
     assert decoded["sensor"] == "alpha"
+
+    {:ok, fun} = DisplayFilter.compile("custom_json.value == 21")
+
+    filtered =
+      [Packet.attach_decoded(packet)]
+      |> DisplayFilter.run(fun)
+      |> Enum.to_list()
+
+    assert length(filtered) == 1
   end
 
   defp build_udp_packet(payload) do

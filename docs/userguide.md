@@ -445,7 +445,11 @@ PcapFileEx.DecoderRegistry.register(%{
     Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) and
       MyProto.match?(IO.iodata_to_binary(payload))
   end,
-  decoder: fn payload -> {:ok, MyProto.decode(IO.iodata_to_binary(payload))} end
+  decoder: fn payload -> {:ok, MyProto.decode(IO.iodata_to_binary(payload))} end,
+  fields: [
+    %{id: "myproto.value", type: :integer, extractor: fn decoded -> decoded["value"] end},
+    %{id: "myproto.sensor", type: :string, extractor: fn decoded -> decoded["sensor"] end}
+  ]
 })
 
 packet =
@@ -463,6 +467,31 @@ IO.inspect(packet.decoded[:my_proto])
 
 # Remove the decoder when no longer needed
 PcapFileEx.DecoderRegistry.unregister(:my_proto)
+
+# Filter using the custom protocol fields
+PcapFileEx.stream("capture.pcapng")
+|> Enum.map(&PcapFileEx.Packet.attach_decoded/1)
+|> PcapFileEx.DisplayFilter.filter("myproto.value >= 20")
+|> Enum.to_list()
+
+### Display Filters
+
+```elixir
+# Ad-hoc filter
+PcapFileEx.stream("capture.pcapng")
+|> PcapFileEx.DisplayFilter.filter("ip.dst == 127.0.0.1 && tcp.dstport == 8899")
+|> Enum.to_list()
+
+# Compiled filter
+{:ok, filter} = PcapFileEx.DisplayFilter.compile("http.request.method == \"GET\"")
+
+PcapFileEx.stream("capture.pcapng")
+|> PcapFileEx.DisplayFilter.run(filter)
+|> Enum.to_list()
+
+# Inspect available fields
+PcapFileEx.DisplayFilter.FieldRegistry.fields()
+```
 ```
 
 For examples of protocol heuristics see Wireshark's

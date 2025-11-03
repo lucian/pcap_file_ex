@@ -219,6 +219,24 @@ end
 `decode_registered/1` leaves the packet untouched; call `PcapFileEx.DecoderRegistry.unregister/1`
 when you want to remove a custom decoder.
 
+### Display filters
+
+```elixir
+PcapFileEx.stream("capture.pcapng")
+|> PcapFileEx.DisplayFilter.filter("ip.src == 127.0.0.1 && http.request.method == \"GET\"")
+|> Enum.to_list()
+
+# Precompile when reusing across streams
+{:ok, filter} = PcapFileEx.DisplayFilter.compile("tcp.srcport == 8899")
+
+PcapFileEx.stream("capture.pcapng")
+|> PcapFileEx.DisplayFilter.run(filter)
+|> Enum.take(5)
+
+# Inspect available fields
+PcapFileEx.DisplayFilter.FieldRegistry.fields()
+```
+
 ### Validate files
 
 ```elixir
@@ -276,7 +294,11 @@ PcapFileEx.DecoderRegistry.register(%{
     Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) and
       MyProto.match?(IO.iodata_to_binary(payload))
   end,
-  decoder: fn payload -> {:ok, MyProto.decode(IO.iodata_to_binary(payload))} end
+  decoder: fn payload -> {:ok, MyProto.decode(IO.iodata_to_binary(payload))} end,
+  fields: [
+    %{id: "myproto.value", type: :integer, extractor: fn decoded -> decoded["value"] end},
+    %{id: "myproto.sensor", type: :string, extractor: fn decoded -> decoded["sensor"] end}
+  ]
 })
 
 {:ok, packets} = PcapFileEx.read_all("capture.pcapng")
@@ -289,6 +311,12 @@ decoded = packet.decoded[:my_proto]
 
 # Or get the decoded value directly (raises on decoder error)
 decoded = PcapFileEx.Packet.decode_registered!(packet)
+
+# Use the fields in display filters
+PcapFileEx.stream("capture.pcapng")
+|> Enum.map(&PcapFileEx.Packet.attach_decoded/1)
+|> PcapFileEx.DisplayFilter.filter("myproto.value >= 25")
+|> Enum.to_list()
 ```
 
 Remove a decoder with `PcapFileEx.DecoderRegistry.unregister/1`. Inspiration for protocol
