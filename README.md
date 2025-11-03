@@ -180,6 +180,21 @@ decoded_http =
   |> PcapFileEx.Filter.by_protocol(:http)
   |> Enum.map(&PcapFileEx.Packet.decode_http!/1)
 
+# Keep packet metadata + decoded payloads
+packets_with_decoded =
+  PcapFileEx.stream("capture.pcapng")
+  |> Enum.map(&PcapFileEx.Packet.attach_decoded/1)
+
+Enum.each(packets_with_decoded, fn packet ->
+  IO.inspect(%{
+    timestamp: packet.timestamp,
+    src: packet.src,
+    dst: packet.dst,
+    protocol: packet.protocol,
+    decoded: packet.decoded
+  })
+end)
+
 ```
 
 ### Decode with the pkt library
@@ -200,7 +215,9 @@ case PcapFileEx.Packet.decode_registered(packet) do
   {:error, reason} -> IO.warn("decoder failed: #{inspect(reason)}")
 end
 ```
-```
+
+`decode_registered/1` leaves the packet untouched; call `PcapFileEx.DecoderRegistry.unregister/1`
+when you want to remove a custom decoder.
 
 ### Validate files
 
@@ -223,13 +240,18 @@ true = PcapFileEx.Validator.pcap?("capture.pcap")
   protocols: [:ether, :ipv4, :tcp, :http],      # Ordered protocol stack
   protocol: :tcp,                               # Highest decoded protocol (:tcp, :udp, ...)
   src: "127.0.0.1:55014",                       # Source endpoint (with port when available)
-  dst: "127.0.0.1:8899"                         # Destination endpoint
+  dst: "127.0.0.1:8899",                        # Destination endpoint
+  layers: [:ipv4, :tcp, :http],                 # Protocol layers (cached)
+  payload: "GET /hello ...",                    # Payload used during decoding
+  decoded: %{http: %PcapFileEx.HTTP{...}}        # Cached decoded payloads
 }
 
 Loopback captures are normalized automatically: the 4-byte pseudo-header is removed and `datalink`
 is remapped to `"ipv4"`/`"ipv6"` so that protocol decoders operate directly on the payload.
 Call `PcapFileEx.Packet.pkt_decode/1` or `pkt_decode!/1` to hand packets to the [`pkt`](https://hex.pm/packages/pkt) library with the correct link type.
-Discover supported protocol atoms via `PcapFileEx.Packet.known_protocols/0`.
+Discover supported protocol atoms via `PcapFileEx.Packet.known_protocols/0`. Use
+`PcapFileEx.Packet.attach_decoded/1` to stash decoded payloads back on the packet
+struct, or call `PcapFileEx.Packet.decode_registered!/1` to fetch them directly.
 
 > Note: Payloads are not decoded automatically—use helpers like `PcapFileEx.Packet.decode_http/1`
 > (or custom decoders) when you need structured data.
@@ -242,14 +264,22 @@ You can extend the application-layer protocol support by registering additional 
 PcapFileEx.DecoderRegistry.register(%{
   protocol: :my_proto,
   matcher: fn layers, payload ->
-    Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) and MyProto.match?(payload)
+    Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) and
+      MyProto.match?(IO.iodata_to_binary(payload))
   end,
-  decoder: fn payload -> {:ok, MyProto.decode(payload)} end
+  decoder: fn payload -> {:ok, MyProto.decode(IO.iodata_to_binary(payload))} end
 })
 
 {:ok, packets} = PcapFileEx.read_all("capture.pcapng")
 packet = Enum.find(packets, &(:my_proto in &1.protocols))
 {:ok, {:my_proto, decoded}} = PcapFileEx.Packet.decode_registered(packet)
+
+# Persist the decoded payload on the packet struct
+packet = PcapFileEx.Packet.attach_decoded(packet)
+decoded = packet.decoded[:my_proto]
+
+# Or get the decoded value directly (raises on decoder error)
+decoded = PcapFileEx.Packet.decode_registered!(packet)
 ```
 
 Remove a decoder with `PcapFileEx.DecoderRegistry.unregister/1`. Inspiration for protocol

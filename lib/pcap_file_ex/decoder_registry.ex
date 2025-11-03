@@ -22,7 +22,6 @@ defmodule PcapFileEx.DecoderRegistry do
         }
 
   @key {:pcap_file_ex, :decoders}
-
   @doc """
   Lists the registered decoder entries in registration order.
   """
@@ -61,6 +60,7 @@ defmodule PcapFileEx.DecoderRegistry do
     entries =
       list()
       |> Enum.reject(&(&1.protocol == protocol))
+      |> maybe_restore_default(protocol)
 
     :persistent_term.put(@key, entries)
     :ok
@@ -73,24 +73,27 @@ defmodule PcapFileEx.DecoderRegistry do
     end
   end
 
+  defp maybe_restore_default(entries, protocol) do
+    case Enum.find(default_decoders(), &(&1.protocol == protocol)) do
+      nil -> entries
+      default -> entries ++ [default]
+    end
+  end
+
   defp default_decoders do
     [
       %{
         protocol: :http,
         matcher: fn layers, payload ->
-          has_tcp_layer?(layers) and match?({:ok, _}, HTTP.decode(payload))
+          Enum.any?(layers, fn
+            {:tcp, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _} -> true
+            :tcp -> true
+            %{protocol: :tcp} -> true
+            _ -> false
+          end) and match?({:ok, _}, HTTP.decode(payload))
         end,
         decoder: &HTTP.decode/1
       }
     ]
-  end
-
-  defp has_tcp_layer?(layers) do
-    Enum.any?(layers, fn
-      {:tcp, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _} -> true
-      :tcp -> true
-      %{protocol: :tcp} -> true
-      _ -> false
-    end)
   end
 end

@@ -17,6 +17,7 @@ defmodule PcapFileEx.UDPTest do
     assert telemetry["value"] == 25.5
     assert telemetry["seq"] == 1
     assert :no_match = Packet.decode_registered(packet)
+    assert Packet.decode_registered!(packet) == nil
   end
 
   test "decodes UDP telemetry response payload" do
@@ -29,6 +30,7 @@ defmodule PcapFileEx.UDPTest do
     assert telemetry["status"] == "ok"
     assert telemetry["ts"] == 1_730_575_588.123
     assert :no_match = Packet.decode_registered(packet)
+    assert Packet.decode_registered!(packet) == nil
   end
 
   test "filter recognizes UDP packets" do
@@ -50,12 +52,13 @@ defmodule PcapFileEx.UDPTest do
   defp build_packet(payload) do
     data = ipv4_udp_packet(payload)
 
-    %Packet{
-      timestamp: DateTime.utc_now(),
+    Packet.from_map(%{
+      timestamp_secs: DateTime.to_unix(DateTime.utc_now()),
+      timestamp_nanos: 0,
       orig_len: byte_size(data),
-      data: data,
+      data: :binary.bin_to_list(data),
       datalink: "ipv4"
-    }
+    })
   end
 
   defp ipv4_udp_packet(payload, opts \\ []) do

@@ -275,6 +275,9 @@ Represents a captured network packet.
 - `protocol` - `atom()` - Highest decoded protocol (e.g., `:tcp`, `:udp`)
 - `src` - `String.t()` - Source endpoint (IP or IP:port when available)
 - `dst` - `String.t()` - Destination endpoint (IP or IP:port when available)
+- `layers` - `[term()]` - Raw protocol layer tuples returned by `:pkt`
+- `payload` - `binary()` - Payload passed to the last decoded protocol
+- `decoded` - `%{optional(atom()) => term()}` - Cached results from application decoders
 
 ```elixir
 %PcapFileEx.Packet{
@@ -285,7 +288,10 @@ Represents a captured network packet.
   protocols: [:ether, :ipv4, :tcp, :http],
   protocol: :tcp,
   src: "127.0.0.1:55014",
-  dst: "127.0.0.1:8899"
+  dst: "127.0.0.1:8899",
+  layers: [:ipv4, :tcp, :http],
+  payload: "GET /hello ...",
+  decoded: %{http: %PcapFileEx.HTTP{...}}
 }
 ```
 
@@ -295,7 +301,8 @@ Represents a captured network packet.
 > set to its final entry. Use `PcapFileEx.Packet.known_protocols/0` to inspect supported atoms.
 > `PcapFileEx.Packet.pkt_decode/1` (or `pkt_decode!/1`) forwards packets to the [`pkt`](https://hex.pm/packages/pkt)
 > library with the proper link-type atom. Payloads are not decoded automatically—call
-> helpers such as `PcapFileEx.Packet.decode_http/1` when you need structured data.
+> helpers such as `PcapFileEx.Packet.decode_http/1`, `decode_registered!/1`, or
+> `attach_decoded/1` when you need structured data cached on the packet.
 
 #### `PcapFileEx.HTTP`
 
@@ -401,6 +408,21 @@ case PcapFileEx.Packet.decode_registered(List.first(http_packets)) do
   :no_match -> :noop
   {:error, reason} -> IO.warn("decoder failed: #{inspect(reason)}")
 end
+
+# Keep metadata + decoded payloads together
+packets_with_decoded =
+  PcapFileEx.stream("capture.pcapng")
+  |> Enum.map(&PcapFileEx.Packet.attach_decoded/1)
+
+Enum.each(packets_with_decoded, fn packet ->
+  IO.inspect(%{
+    ts: packet.timestamp,
+    src: packet.src,
+    dst: packet.dst,
+    protocol: packet.protocol,
+    decoded: packet.decoded
+  })
+end)
 ```
 
 ### Custom Decoders
@@ -411,9 +433,10 @@ Register additional protocol decoders at runtime when you need to recognise cust
 PcapFileEx.DecoderRegistry.register(%{
   protocol: :my_proto,
   matcher: fn layers, payload ->
-    Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) and MyProto.match?(payload)
+    Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) and
+      MyProto.match?(IO.iodata_to_binary(payload))
   end,
-  decoder: fn payload -> {:ok, MyProto.decode(payload)} end
+  decoder: fn payload -> {:ok, MyProto.decode(IO.iodata_to_binary(payload))} end
 })
 
 packet =
@@ -424,6 +447,10 @@ case PcapFileEx.Packet.decode_registered(packet) do
   {:ok, {:my_proto, decoded}} -> IO.inspect(decoded)
   :no_match -> :noop
 end
+
+# Persist decoded payload on the packet struct
+packet = PcapFileEx.Packet.attach_decoded(packet)
+IO.inspect(packet.decoded[:my_proto])
 
 # Remove the decoder when no longer needed
 PcapFileEx.DecoderRegistry.unregister(:my_proto)

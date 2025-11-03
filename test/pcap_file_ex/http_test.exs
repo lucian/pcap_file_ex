@@ -31,6 +31,9 @@ defmodule PcapFileEx.HTTPTest do
     assert List.last(packet.protocols) == :http
     assert {:ok, {:http, decoded_http}} = Packet.decode_registered(packet)
     assert decoded_http == http
+    attached = Packet.attach_decoded(packet)
+    assert attached.decoded[:http] == http
+    assert Packet.decode_registered!(packet) == http
 
     assert http.type == :request
     assert http.method == "GET"
@@ -57,6 +60,8 @@ defmodule PcapFileEx.HTTPTest do
     assert List.last(packet.protocols) == :http
     assert {:ok, {:http, decoded_http}} = Packet.decode_registered(packet)
     assert decoded_http == http
+    assert Packet.attach_decoded(packet).decoded[:http] == http
+    assert Packet.decode_registered!(packet) == http
 
     assert http.type == :response
     assert http.status_code == 200

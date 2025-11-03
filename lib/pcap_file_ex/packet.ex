@@ -27,10 +27,27 @@ defmodule PcapFileEx.Packet do
           protocols: [atom()],
           protocol: atom() | nil,
           src: String.t() | nil,
-          dst: String.t() | nil
+          dst: String.t() | nil,
+          layers: [layer()] | nil,
+          payload: binary() | nil,
+          decoded: %{optional(atom()) => term()}
         }
 
-  defstruct [:timestamp, :orig_len, :data, :datalink, :protocols, :protocol, :src, :dst]
+  @type layer :: tuple() | atom() | map()
+
+  defstruct [
+    :timestamp,
+    :orig_len,
+    :data,
+    :datalink,
+    :protocols,
+    :protocol,
+    :src,
+    :dst,
+    :layers,
+    :payload,
+    :decoded
+  ]
 
   @doc """
   Creates a Packet struct from a map returned by the NIF.
@@ -42,7 +59,7 @@ defmodule PcapFileEx.Packet do
     timestamp = DateTime.add(timestamp, map.timestamp_nanos, :nanosecond)
     base_data = :binary.list_to_bin(map.data)
     {data, normalized_datalink} = normalize_loopback(base_data, datalink)
-    {protocols, src, dst} = extract_metadata(data, normalized_datalink)
+    {protocols, src, dst, layers, payload} = extract_metadata(data, normalized_datalink)
     protocol = List.last(protocols)
 
     %__MODULE__{
@@ -53,7 +70,10 @@ defmodule PcapFileEx.Packet do
       protocols: protocols,
       protocol: protocol,
       src: src,
-      dst: dst
+      dst: dst,
+      layers: layers,
+      payload: payload,
+      decoded: %{}
     }
   end
 
@@ -158,15 +178,66 @@ defmodule PcapFileEx.Packet do
   """
   @spec decode_registered(t()) :: {:ok, {atom(), term()}} | :no_match | {:error, term()}
   def decode_registered(%__MODULE__{} = packet) do
-    with {:ok, {layers, payload}} <-
-           decode_layers(protocol_from_datalink(packet.datalink), packet.data),
-         {:ok, entry} <- find_decoder(layers, payload),
-         {:ok, decoded} <- safe_decode(entry, payload) do
-      {:ok, {entry.protocol, decoded}}
+    with {:ok, {layers, payload}} <- layers_payload(packet),
+         {:ok, entry} <- find_decoder(layers, payload) do
+      case cached_decoded(packet, entry.protocol) do
+        {:ok, value} ->
+          {:ok, {entry.protocol, value}}
+
+        :miss ->
+          case safe_decode(entry, payload) do
+            {:ok, decoded} -> {:ok, {entry.protocol, decoded}}
+            other -> other
+          end
+      end
     else
       :no_match -> :no_match
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  @doc """
+  Convenience variant of `decode_registered/1` that returns the decoded value or `nil`.
+  Raises on decoder errors.
+  """
+  @spec decode_registered!(t()) :: term() | nil
+  def decode_registered!(%__MODULE__{} = packet) do
+    case decode_registered(packet) do
+      {:ok, {_, value}} -> value
+      :no_match -> nil
+      {:error, reason} -> raise RuntimeError, "decoder failed: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Attaches the decoded payload (when available) to the packet's `decoded` map.
+  """
+  @spec attach_decoded(t()) :: t()
+  def attach_decoded(%__MODULE__{} = packet) do
+    case decode_registered(packet) do
+      {:ok, {protocol, value}} ->
+        decoded = Map.put(packet.decoded || %{}, protocol, value)
+        %__MODULE__{packet | decoded: decoded}
+
+      _ ->
+        packet
+    end
+  end
+
+  defp cached_decoded(%__MODULE__{decoded: decoded}, protocol) do
+    case decoded && Map.get(decoded, protocol) do
+      nil -> :miss
+      value -> {:ok, value}
+    end
+  end
+
+  defp layers_payload(%__MODULE__{layers: layers, payload: payload})
+       when is_list(layers) and is_binary(payload) do
+    {:ok, {layers, payload}}
+  end
+
+  defp layers_payload(%__MODULE__{} = packet) do
+    decode_layers(protocol_from_datalink(packet.datalink), packet.data)
   end
 
   defp extract_payload(packet, required_protocol) do
@@ -210,22 +281,23 @@ defmodule PcapFileEx.Packet do
 
   defp extract_metadata(data, datalink) do
     with {:ok, {layers, payload}} <- decode_layers(protocol_from_datalink(datalink), data) do
-      layers_list = List.wrap(layers)
-      protocols = build_protocol_stack(layers_list, payload)
+      layers_list = layers
+      norm_payload = normalize_payload(payload)
+      protocols = build_protocol_stack(layers_list, norm_payload)
       {src_ip, dst_ip, src_port, dst_port} = extract_endpoints(layers_list)
 
       src = compose_endpoint(src_ip, src_port)
       dst = compose_endpoint(dst_ip, dst_port)
 
-      {protocols, src, dst}
+      {protocols, src, dst, layers_list, norm_payload}
     else
-      _ -> {[], nil, nil}
+      _ -> {[], nil, nil, nil, nil}
     end
   end
 
   defp build_protocol_stack(layers, payload) do
     base =
-      layers
+      (layers || [])
       |> Enum.map(&layer_atom/1)
       |> Enum.reject(&is_nil/1)
 
@@ -268,7 +340,7 @@ defmodule PcapFileEx.Packet do
 
   defp safe_match?(%{matcher: matcher}, layers, payload) do
     try do
-      matcher.(layers, payload)
+      matcher.(layers || [], normalize_payload(payload))
     rescue
       _ -> false
     end
@@ -276,7 +348,7 @@ defmodule PcapFileEx.Packet do
 
   defp safe_decode(%{decoder: decoder}, payload) do
     try do
-      case decoder.(payload) do
+      case decoder.(normalize_payload(payload)) do
         {:ok, value} -> {:ok, value}
         {:error, reason} -> {:error, reason}
         value -> {:ok, value}
@@ -372,6 +444,10 @@ defmodule PcapFileEx.Packet do
   end
 
   defp ip_tuple?(_), do: false
+
+  defp normalize_payload(nil), do: <<>>
+  defp normalize_payload(payload) when is_binary(payload), do: payload
+  defp normalize_payload(payload), do: IO.iodata_to_binary(payload)
 
   @doc """
   Returns the list of protocols that may appear in `packet.protocols`.
