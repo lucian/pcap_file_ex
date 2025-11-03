@@ -1,7 +1,7 @@
 defmodule PcapFileEx.PcapNgTest do
   use ExUnit.Case, async: true
 
-  alias PcapFileEx.{PcapNg, Packet}
+  alias PcapFileEx.{Endpoint, Packet, PcapNg}
 
   @test_pcapng_file "test/fixtures/sample.pcapng"
 
@@ -49,13 +49,13 @@ defmodule PcapFileEx.PcapNgTest do
         if packet.protocol, do: assert(List.last(packet.protocols) == packet.protocol)
 
         if packet.src do
-          assert is_binary(packet.src)
-          assert packet.src != ""
+          assert %Endpoint{ip: ip} = packet.src
+          assert is_binary(ip)
         end
 
         if packet.dst do
-          assert is_binary(packet.dst)
-          assert packet.dst != ""
+          assert %Endpoint{ip: ip} = packet.dst
+          assert is_binary(ip)
         end
 
         assert {:ok, decoded} = Packet.pkt_decode(packet)
@@ -106,13 +106,11 @@ defmodule PcapFileEx.PcapNgTest do
           if packet.protocol, do: assert(List.last(packet.protocols) == packet.protocol)
 
           if packet.src do
-            assert is_binary(packet.src)
-            assert packet.src != ""
+            assert %Endpoint{} = packet.src
           end
 
           if packet.dst do
-            assert is_binary(packet.dst)
-            assert packet.dst != ""
+            assert %Endpoint{} = packet.dst
           end
 
           assert {:ok, decoded} = Packet.pkt_decode(packet)
@@ -134,8 +132,8 @@ defmodule PcapFileEx.PcapNgTest do
         Enum.each(packets, fn packet ->
           assert packet.timestamp.year >= 2024
           assert packet.timestamp.month in 1..12
-          if packet.src, do: assert(String.length(packet.src) > 0)
-          if packet.dst, do: assert(String.length(packet.dst) > 0)
+          if packet.src, do: assert(String.length(Packet.endpoint_to_string(packet.src)) > 0)
+          if packet.dst, do: assert(String.length(Packet.endpoint_to_string(packet.dst)) > 0)
         end)
       end
     end

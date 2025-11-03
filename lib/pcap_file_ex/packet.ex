@@ -3,7 +3,7 @@ defmodule PcapFileEx.Packet do
   Represents a captured network packet.
   """
 
-  alias PcapFileEx.{DecoderRegistry, HTTP}
+  alias PcapFileEx.{DecoderRegistry, Endpoint, HTTP}
 
   @loopback_ipv6_families [10, 23, 24, 28, 30]
   @pkt_protocol_map %{
@@ -26,8 +26,8 @@ defmodule PcapFileEx.Packet do
           datalink: String.t() | nil,
           protocols: [atom()],
           protocol: atom() | nil,
-          src: String.t() | nil,
-          dst: String.t() | nil,
+          src: Endpoint.t() | nil,
+          dst: Endpoint.t() | nil,
           layers: [layer()] | nil,
           payload: binary() | nil,
           decoded: %{optional(atom()) => term()}
@@ -107,6 +107,12 @@ defmodule PcapFileEx.Packet do
   def pkt_protocol(%__MODULE__{datalink: datalink}) do
     protocol_from_datalink(datalink)
   end
+
+  @doc """
+  Formats an endpoint as `"ip:port"` (or just `ip` when the port is absent).
+  """
+  @spec endpoint_to_string(Endpoint.t() | nil) :: String.t() | nil
+  def endpoint_to_string(endpoint), do: Endpoint.to_string(endpoint)
 
   @doc """
   Convenience wrapper around `:pkt.decode/2` that uses the packet's link type.
@@ -286,8 +292,8 @@ defmodule PcapFileEx.Packet do
       protocols = build_protocol_stack(layers_list, norm_payload)
       {src_ip, dst_ip, src_port, dst_port} = extract_endpoints(layers_list)
 
-      src = compose_endpoint(src_ip, src_port)
-      dst = compose_endpoint(dst_ip, dst_port)
+      src = build_endpoint(src_ip, src_port)
+      dst = build_endpoint(dst_ip, dst_port)
 
       {protocols, src, dst, layers_list, norm_payload}
     else
@@ -391,9 +397,8 @@ defmodule PcapFileEx.Packet do
   defp format_ip({_, _, _, _, _, _, _, _} = ip), do: ip |> :inet.ntoa() |> to_string()
   defp format_ip(_), do: nil
 
-  defp compose_endpoint(nil, _port), do: nil
-  defp compose_endpoint(ip, nil), do: ip
-  defp compose_endpoint(ip, port), do: "#{ip}:#{port}"
+  defp build_endpoint(nil, _port), do: nil
+  defp build_endpoint(ip, port), do: Endpoint.new(ip, port)
 
   defp protocol_from_datalink(datalink) do
     Map.get(@pkt_protocol_map, datalink, @default_pkt_protocol)

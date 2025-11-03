@@ -304,6 +304,15 @@ Represents a captured network packet.
 > helpers such as `PcapFileEx.Packet.decode_http/1`, `decode_registered!/1`, or
 > `attach_decoded/1` when you need structured data cached on the packet.
 
+Pattern matching endpoints:
+
+```elixir
+case packet.dst do
+  %PcapFileEx.Endpoint{ip: "127.0.0.1", port: 8899} -> :target
+  _ -> :other
+end
+```
+
 #### `PcapFileEx.HTTP`
 
 Represents a parsed HTTP request or response extracted from a packet payload.
@@ -417,8 +426,8 @@ packets_with_decoded =
 Enum.each(packets_with_decoded, fn packet ->
   IO.inspect(%{
     ts: packet.timestamp,
-    src: packet.src,
-    dst: packet.dst,
+    src: PcapFileEx.Packet.endpoint_to_string(packet.src),
+    dst: PcapFileEx.Packet.endpoint_to_string(packet.dst),
     protocol: packet.protocol,
     decoded: packet.decoded
   })

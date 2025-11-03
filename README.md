@@ -188,8 +188,8 @@ packets_with_decoded =
 Enum.each(packets_with_decoded, fn packet ->
   IO.inspect(%{
     timestamp: packet.timestamp,
-    src: packet.src,
-    dst: packet.dst,
+    src: PcapFileEx.Packet.endpoint_to_string(packet.src),
+    dst: PcapFileEx.Packet.endpoint_to_string(packet.dst),
     protocol: packet.protocol,
     decoded: packet.decoded
   })
@@ -239,8 +239,8 @@ true = PcapFileEx.Validator.pcap?("capture.pcap")
   datalink: "ethernet",                         # Link-layer type for the packet
   protocols: [:ether, :ipv4, :tcp, :http],      # Ordered protocol stack
   protocol: :tcp,                               # Highest decoded protocol (:tcp, :udp, ...)
-  src: "127.0.0.1:55014",                       # Source endpoint (with port when available)
-  dst: "127.0.0.1:8899",                        # Destination endpoint
+  src: %PcapFileEx.Endpoint{ip: "127.0.0.1", port: 55014},
+  dst: %PcapFileEx.Endpoint{ip: "127.0.0.1", port: 8899},
   layers: [:ipv4, :tcp, :http],                 # Protocol layers (cached)
   payload: "GET /hello ...",                    # Payload used during decoding
   decoded: %{http: %PcapFileEx.HTTP{...}}        # Cached decoded payloads
@@ -255,6 +255,15 @@ struct, or call `PcapFileEx.Packet.decode_registered!/1` to fetch them directly.
 
 > Note: Payloads are not decoded automatically—use helpers like `PcapFileEx.Packet.decode_http/1`
 > (or custom decoders) when you need structured data.
+
+Pattern matching on endpoints is now straightforward:
+
+```elixir
+case packet.src do
+  %PcapFileEx.Endpoint{ip: "127.0.0.1", port: 8899} -> :ok
+  _ -> :other
+end
+```
 
 ### Custom Decoders
 
