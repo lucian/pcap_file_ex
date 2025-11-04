@@ -139,4 +139,105 @@ defmodule PcapFileEx.StatsTest do
       assert is_float(dist.median)
     end
   end
+
+  describe "compute_streaming/1" do
+    test "computes same statistics as compute/1 for PCAP file", %{pcap_count: expected_count} do
+      # Compute using both methods
+      assert {:ok, regular_stats} = Stats.compute(@test_pcap_file)
+      assert {:ok, streaming_stats} = Stats.compute_streaming(@test_pcap_file)
+
+      # Should produce identical results
+      assert streaming_stats.packet_count == regular_stats.packet_count
+      assert streaming_stats.packet_count == expected_count
+      assert streaming_stats.total_bytes == regular_stats.total_bytes
+      assert streaming_stats.min_packet_size == regular_stats.min_packet_size
+      assert streaming_stats.max_packet_size == regular_stats.max_packet_size
+      assert streaming_stats.avg_packet_size == regular_stats.avg_packet_size
+      assert streaming_stats.first_timestamp == regular_stats.first_timestamp
+      assert streaming_stats.last_timestamp == regular_stats.last_timestamp
+      assert streaming_stats.duration_seconds == regular_stats.duration_seconds
+    end
+
+    test "computes same statistics as compute/1 for PCAPNG file", %{pcapng_count: expected_count} do
+      assert {:ok, regular_stats} = Stats.compute(@test_pcapng_file)
+      assert {:ok, streaming_stats} = Stats.compute_streaming(@test_pcapng_file)
+
+      assert streaming_stats.packet_count == regular_stats.packet_count
+      assert streaming_stats.packet_count == expected_count
+      assert streaming_stats.total_bytes == regular_stats.total_bytes
+      assert_in_delta streaming_stats.avg_packet_size, regular_stats.avg_packet_size, 0.01
+    end
+
+    test "works with stream input (not just path)" do
+      # Create stream and compute stats
+      stats =
+        PcapFileEx.stream(@test_pcap_file)
+        |> Stats.compute_streaming()
+
+      assert stats.packet_count > 0
+      assert stats.total_bytes > 0
+      assert is_float(stats.avg_packet_size)
+    end
+
+    test "works with filtered stream", %{pcap_count: total_count} do
+      # Get all TCP packets
+      all_tcp_count =
+        PcapFileEx.stream(@test_pcap_file)
+        |> Enum.filter(fn packet -> :tcp in packet.protocols end)
+        |> length()
+
+      # Compute stats only for TCP packets
+      tcp_stats =
+        PcapFileEx.stream(@test_pcap_file)
+        |> Stream.filter(fn packet -> :tcp in packet.protocols end)
+        |> Stats.compute_streaming()
+
+      # Should only count TCP packets
+      assert tcp_stats.packet_count == all_tcp_count
+      assert tcp_stats.packet_count <= total_count
+      assert tcp_stats.total_bytes > 0
+    end
+
+    test "handles empty stream" do
+      empty_stream = Stream.filter([1, 2, 3], fn _ -> false end)
+      stats = Stats.compute_streaming(empty_stream)
+
+      assert stats.packet_count == 0
+      assert stats.total_bytes == 0
+      assert stats.min_packet_size == nil
+      assert stats.max_packet_size == 0
+      assert stats.avg_packet_size == 0.0
+      assert stats.first_timestamp == nil
+      assert stats.last_timestamp == nil
+      assert stats.duration_seconds == nil
+    end
+
+    test "constant memory usage (spot check with take)" do
+      # This test verifies streaming works by taking only first N packets
+      # If it loaded all into memory, this would be slow for large files
+      stats =
+        PcapFileEx.stream(@test_pcap_file)
+        |> Stream.take(5)
+        |> Stats.compute_streaming()
+
+      assert stats.packet_count == 5
+      assert stats.total_bytes > 0
+    end
+
+    test "can be chained with other stream operations" do
+      # Complex streaming pipeline
+      stats =
+        PcapFileEx.stream(@test_pcap_file)
+        |> Stream.filter(fn packet -> byte_size(packet.data) > 50 end)
+        |> Stream.take(10)
+        |> Stats.compute_streaming()
+
+      assert stats.packet_count <= 10
+      assert stats.min_packet_size > 50
+    end
+
+    test "returns error for non-existent file" do
+      assert {:error, _reason} = Stats.compute_streaming("nonexistent.pcap")
+    end
+  end
 end

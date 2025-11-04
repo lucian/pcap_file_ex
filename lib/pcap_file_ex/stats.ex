@@ -21,6 +21,9 @@ defmodule PcapFileEx.Stats do
 
   Reads all packets and computes various statistics about the capture.
 
+  **Note:** This function loads all packets into memory. For large files,
+  consider using `compute_streaming/1` instead.
+
   ## Examples
 
       {:ok, stats} = PcapFileEx.Stats.compute("capture.pcap")
@@ -36,6 +39,49 @@ defmodule PcapFileEx.Stats do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @doc """
+  Computes statistics for a capture file using streaming (constant memory).
+
+  Unlike `compute/1`, this function processes packets one at a time without
+  loading the entire file into memory. This is ideal for large files (>100MB).
+
+  Accepts either a file path or an existing stream of packets.
+
+  ## Examples
+
+      # From file path
+      {:ok, stats} = PcapFileEx.Stats.compute_streaming("huge_10gb.pcap")
+      IO.inspect(stats.packet_count)
+
+      # From stream (can be combined with filtering)
+      stats =
+        PcapFileEx.stream("capture.pcap")
+        |> PcapFileEx.Filter.by_protocol(:tcp)
+        |> PcapFileEx.Stats.compute_streaming()
+
+      IO.inspect(stats.total_bytes)
+  """
+  @spec compute_streaming(Path.t() | Enumerable.t()) :: {:ok, stats()} | stats()
+  def compute_streaming(path) when is_binary(path) do
+    try do
+      stats =
+        PcapFileEx.stream(path)
+        |> compute_streaming()
+
+      {:ok, stats}
+    rescue
+      e in RuntimeError -> {:error, e.message}
+    end
+  end
+
+  def compute_streaming(stream) do
+    stream
+    |> Enum.reduce(initial_accumulator(), fn packet, acc ->
+      update_accumulator(acc, packet)
+    end)
+    |> finalize_stats()
   end
 
   @doc """
@@ -225,6 +271,65 @@ defmodule PcapFileEx.Stats do
   end
 
   # Private helper functions
+
+  # Streaming statistics accumulator functions
+
+  defp initial_accumulator do
+    %{
+      count: 0,
+      total_bytes: 0,
+      min_size: nil,
+      max_size: 0,
+      first_timestamp: nil,
+      last_timestamp: nil
+    }
+  end
+
+  defp update_accumulator(acc, packet) do
+    size = byte_size(packet.data)
+
+    %{
+      count: acc.count + 1,
+      total_bytes: acc.total_bytes + size,
+      min_size: if(acc.min_size, do: min(acc.min_size, size), else: size),
+      max_size: max(acc.max_size, size),
+      first_timestamp: acc.first_timestamp || packet.timestamp,
+      last_timestamp: packet.timestamp
+    }
+  end
+
+  defp finalize_stats(%{count: 0} = _acc) do
+    %{
+      packet_count: 0,
+      total_bytes: 0,
+      min_packet_size: nil,
+      max_packet_size: 0,
+      avg_packet_size: 0.0,
+      first_timestamp: nil,
+      last_timestamp: nil,
+      duration_seconds: nil
+    }
+  end
+
+  defp finalize_stats(acc) do
+    duration =
+      if acc.first_timestamp && acc.last_timestamp do
+        DateTime.diff(acc.last_timestamp, acc.first_timestamp, :millisecond) / 1000.0
+      else
+        nil
+      end
+
+    %{
+      packet_count: acc.count,
+      total_bytes: acc.total_bytes,
+      min_packet_size: acc.min_size,
+      max_packet_size: acc.max_size,
+      avg_packet_size: acc.total_bytes / acc.count,
+      first_timestamp: acc.first_timestamp,
+      last_timestamp: acc.last_timestamp,
+      duration_seconds: duration
+    }
+  end
 
   defp percentile(sorted_list, p) when p >= 0 and p <= 1 do
     len = length(sorted_list)

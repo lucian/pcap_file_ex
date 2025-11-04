@@ -67,6 +67,11 @@
   - Logical operators (AND, OR, NOT)
   - `PcapFileEx.PreFilter` module with type-safe filter constructors
   - `set_filter/2` and `clear_filter/1` for both PCAP and PCAPNG readers
+- **Streaming statistics** via `PcapFileEx.Stats.compute_streaming/1`
+  - Constant memory usage for huge files (no size limit)
+  - Can be combined with filtering and other stream operations
+  - Produces identical results to `compute/1` but never loads all packets into memory
+  - Accepts both file paths and streams
 - PCAPNG interface metadata exposure (`PcapFileEx.PcapNg.interfaces/1`) and per-packet fields (`interface_id`, `interface`, `timestamp_resolution`).
 - Test fixture script option `--interfaces ... --nanosecond` for generating multi-interface nanosecond captures; documentation on advanced capture workflows.
 - Comprehensive documentation:
@@ -74,6 +79,7 @@
   - `docs/benchmarks.md` - Benchmark guide
   - `docs/epcap_comparison.md` - Comparison with epcap library
   - `docs/TROUBLESHOOTING.md` - User troubleshooting guide
+  - `docs/SECURITY_ETF_FIX.md` - ETF security fix documentation
 
 ### Changed
 - `PcapFileEx.Stream.from_reader/1` now supports both `Pcap` and `PcapNg` readers (previously only supported Pcap)

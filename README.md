@@ -163,6 +163,15 @@ IO.puts("Packets: #{stats.packet_count}")
 IO.puts("Total bytes: #{stats.total_bytes}")
 IO.puts("Duration: #{stats.duration_seconds}s")
 IO.puts("Avg packet size: #{stats.avg_packet_size}")
+
+# For large files (>100MB), use streaming (constant memory)
+{:ok, stats} = PcapFileEx.Stats.compute_streaming("huge_10gb.pcap")
+
+# Combine with filtering
+tcp_stats =
+  PcapFileEx.stream("capture.pcap")
+  |> Stream.filter(fn p -> :tcp in p.protocols end)
+  |> PcapFileEx.Stats.compute_streaming()
 ```
 
 ### Filter packets
