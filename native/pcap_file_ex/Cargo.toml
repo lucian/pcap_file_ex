@@ -11,3 +11,5 @@ crate-type = ["cdylib"]
 rustler = "0.37.0"
 pcap-file = { git = "https://github.com/courvoif/pcap-file" }
 thiserror = "1.0"
+etherparse = "0.15"
+ipnetwork = "0.20"

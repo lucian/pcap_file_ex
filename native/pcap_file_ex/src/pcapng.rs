@@ -1,3 +1,4 @@
+use crate::filter::{FilterContext, PacketFilter};
 use crate::types::{interface_to_map, InterfaceMap, PacketMap};
 use pcap_file::pcapng::blocks::Block;
 use pcap_file::pcapng::PcapNgReader;
@@ -8,6 +9,7 @@ use std::sync::Mutex;
 
 pub struct PcapNgReaderResource {
     reader: Mutex<PcapNgReader<BufReader<File>>>,
+    filter: Mutex<Option<FilterContext>>,
 }
 
 #[rustler::nif]
@@ -18,6 +20,7 @@ pub fn pcapng_open(path: String) -> Result<ResourceArc<PcapNgReaderResource>, Er
 
     Ok(ResourceArc::new(PcapNgReaderResource {
         reader: Mutex::new(reader),
+        filter: Mutex::new(None),
     }))
 }
 
@@ -47,6 +50,7 @@ pub fn pcapng_next_packet(
     resource: ResourceArc<PcapNgReaderResource>,
 ) -> Result<Option<PacketMap>, Error> {
     let mut reader = resource.reader.lock().unwrap();
+    let filter = resource.filter.lock().unwrap();
 
     // Iterate through blocks to find packet blocks
     loop {
@@ -65,10 +69,23 @@ pub fn pcapng_next_packet(
                 let datalink = interface_map.linktype.clone();
                 let timestamp_resolution = Some(interface_map.timestamp_resolution.clone());
 
+                // Parse datalink for filtering
+                let datalink_parsed = crate::types::parse_datalink_string(&datalink);
+                let timestamp_secs = packet_block.timestamp.as_secs();
+                let orig_len = packet_block.original_len;
+                let data = packet_block.data.as_ref();
+
+                // Check if packet matches filter
+                if let Some(ref filter_ctx) = *filter {
+                    if !filter_ctx.matches(data, &datalink_parsed, orig_len, timestamp_secs) {
+                        continue; // Skip this packet, try next one
+                    }
+                }
+
                 let packet_map = PacketMap {
-                    timestamp_secs: packet_block.timestamp.as_secs(),
+                    timestamp_secs,
                     timestamp_nanos: packet_block.timestamp.subsec_nanos(),
-                    orig_len: packet_block.original_len,
+                    orig_len,
                     data: packet_block.data.into_owned(),
                     datalink,
                     timestamp_resolution,
@@ -83,4 +100,29 @@ pub fn pcapng_next_packet(
             None => return Ok(None),
         }
     }
+}
+
+#[rustler::nif]
+pub fn pcapng_set_filter(
+    resource: ResourceArc<PcapNgReaderResource>,
+    filters: Vec<PacketFilter>,
+) -> Result<rustler::types::atom::Atom, Error> {
+    let mut filter = resource.filter.lock().unwrap();
+
+    if filters.is_empty() {
+        *filter = None;
+    } else {
+        *filter = Some(FilterContext::new(filters));
+    }
+
+    Ok(rustler::types::atom::ok())
+}
+
+#[rustler::nif]
+pub fn pcapng_clear_filter(
+    resource: ResourceArc<PcapNgReaderResource>,
+) -> Result<rustler::types::atom::Atom, Error> {
+    let mut filter = resource.filter.lock().unwrap();
+    *filter = None;
+    Ok(rustler::types::atom::ok())
 }

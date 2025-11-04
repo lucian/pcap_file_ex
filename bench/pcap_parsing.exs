@@ -1,6 +1,6 @@
 Mix.Task.run("app.start")
 
-alias PcapFileEx.{Filter, HTTP, Packet}
+alias PcapFileEx.{Filter, HTTP, Packet, Pcap, PcapNg, PreFilter}
 
 defmodule PcapFileExBench do
   @moduledoc false
@@ -8,10 +8,23 @@ defmodule PcapFileExBench do
   def run(path) do
     Benchee.run(
       %{
+        # Baseline benchmarks
         "stream parse (decode: false)" => fn -> parse_raw(path) end,
         "stream parse (decode: true)" => fn -> parse_decoded(path) end,
-        "filter UDP packets" => fn -> filter_udp(path) end,
-        "filter HTTP POST requests" => fn -> filter_http_post(path) end
+
+        # Post-filtering benchmarks (Elixir layer)
+        "POST-FILTER: UDP packets" => fn -> filter_udp(path) end,
+        "POST-FILTER: TCP packets" => fn -> filter_tcp(path) end,
+        "POST-FILTER: HTTP POST requests" => fn -> filter_http_post(path) end,
+        "POST-FILTER: large packets (>1000 bytes)" => fn -> filter_large_packets(path) end,
+
+        # Pre-filtering benchmarks (Rust layer)
+        "PRE-FILTER: UDP packets" => fn -> prefilter_udp(path) end,
+        "PRE-FILTER: TCP packets" => fn -> prefilter_tcp(path) end,
+        "PRE-FILTER: TCP port 80" => fn -> prefilter_tcp_port_80(path) end,
+        "PRE-FILTER: TCP port 80 or 443" => fn -> prefilter_tcp_http_ports(path) end,
+        "PRE-FILTER: large packets (>1000 bytes)" => fn -> prefilter_large_packets(path) end,
+        "PRE-FILTER: combined (TCP + port 8080)" => fn -> prefilter_combined(path) end
       },
       time: 10,
       warmup: 2,
@@ -43,9 +56,19 @@ defmodule PcapFileExBench do
     end)
   end
 
+  # Post-filtering functions (Elixir layer)
+
   defp filter_udp(path) do
     PcapFileEx.stream(path, decode: false)
     |> Filter.by_protocol(:udp)
+    |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+      {count + 1, bytes + byte_size(packet.data)}
+    end)
+  end
+
+  defp filter_tcp(path) do
+    PcapFileEx.stream(path, decode: false)
+    |> Filter.by_protocol(:tcp)
     |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
       {count + 1, bytes + byte_size(packet.data)}
     end)
@@ -57,6 +80,174 @@ defmodule PcapFileExBench do
     |> Enum.reduce(0, fn packet, acc ->
       if http_post?(packet), do: acc + 1, else: acc
     end)
+  end
+
+  defp filter_large_packets(path) do
+    PcapFileEx.stream(path, decode: false)
+    |> Filter.by_size(1000..65535)
+    |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+      {count + 1, bytes + byte_size(packet.data)}
+    end)
+  end
+
+  # Pre-filtering functions (Rust layer)
+
+  defp prefilter_udp(path) do
+    {:ok, reader} = open_reader(path)
+
+    filters = [PreFilter.protocol("udp")]
+    set_filter(reader, filters)
+
+    result =
+      stream_from_reader(reader)
+      |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+        {count + 1, bytes + byte_size(packet.data)}
+      end)
+
+    close_reader(reader)
+    result
+  end
+
+  defp prefilter_tcp(path) do
+    {:ok, reader} = open_reader(path)
+
+    filters = [PreFilter.protocol("tcp")]
+    set_filter(reader, filters)
+
+    result =
+      stream_from_reader(reader)
+      |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+        {count + 1, bytes + byte_size(packet.data)}
+      end)
+
+    close_reader(reader)
+    result
+  end
+
+  defp prefilter_tcp_port_80(path) do
+    {:ok, reader} = open_reader(path)
+
+    filters = [
+      PreFilter.protocol("tcp"),
+      PreFilter.port_dest(80)
+    ]
+
+    set_filter(reader, filters)
+
+    result =
+      stream_from_reader(reader)
+      |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+        {count + 1, bytes + byte_size(packet.data)}
+      end)
+
+    close_reader(reader)
+    result
+  end
+
+  defp prefilter_tcp_http_ports(path) do
+    {:ok, reader} = open_reader(path)
+
+    filters = [
+      PreFilter.protocol("tcp"),
+      PreFilter.any([
+        PreFilter.port_dest(80),
+        PreFilter.port_dest(443)
+      ])
+    ]
+
+    set_filter(reader, filters)
+
+    result =
+      stream_from_reader(reader)
+      |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+        {count + 1, bytes + byte_size(packet.data)}
+      end)
+
+    close_reader(reader)
+    result
+  end
+
+  defp prefilter_large_packets(path) do
+    {:ok, reader} = open_reader(path)
+
+    filters = [PreFilter.size_min(1000)]
+    set_filter(reader, filters)
+
+    result =
+      stream_from_reader(reader)
+      |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+        {count + 1, bytes + byte_size(packet.data)}
+      end)
+
+    close_reader(reader)
+    result
+  end
+
+  defp prefilter_combined(path) do
+    {:ok, reader} = open_reader(path)
+
+    filters = [
+      PreFilter.protocol("tcp"),
+      PreFilter.port_dest(8080)
+    ]
+
+    set_filter(reader, filters)
+
+    result =
+      stream_from_reader(reader)
+      |> Enum.reduce({0, 0}, fn packet, {count, bytes} ->
+        {count + 1, bytes + byte_size(packet.data)}
+      end)
+
+    close_reader(reader)
+    result
+  end
+
+  # Helper functions for reader management
+
+  defp open_reader(path) do
+    cond do
+      String.ends_with?(path, ".pcapng") -> PcapNg.open(path)
+      String.ends_with?(path, ".pcap") -> Pcap.open(path)
+      true -> Pcap.open(path)
+    end
+  end
+
+  defp set_filter(reader, filters) do
+    case reader do
+      %Pcap{} -> Pcap.set_filter(reader, filters)
+      %PcapNg{} -> PcapNg.set_filter(reader, filters)
+    end
+  end
+
+  defp stream_from_reader(reader) do
+    case reader do
+      %Pcap{} -> stream_pcap(reader, [])
+      %PcapNg{} -> stream_pcapng(reader, [])
+    end
+  end
+
+  defp stream_pcap(reader, acc) do
+    case Pcap.next_packet(reader) do
+      {:ok, packet} -> stream_pcap(reader, [packet | acc])
+      :eof -> Enum.reverse(acc)
+      {:error, _} -> Enum.reverse(acc)
+    end
+  end
+
+  defp stream_pcapng(reader, acc) do
+    case PcapNg.next_packet(reader) do
+      {:ok, packet} -> stream_pcapng(reader, [packet | acc])
+      :eof -> Enum.reverse(acc)
+      {:error, _} -> Enum.reverse(acc)
+    end
+  end
+
+  defp close_reader(reader) do
+    case reader do
+      %Pcap{} -> Pcap.close(reader)
+      %PcapNg{} -> PcapNg.close(reader)
+    end
   end
 
   defp http_post?(%Packet{} = packet) do

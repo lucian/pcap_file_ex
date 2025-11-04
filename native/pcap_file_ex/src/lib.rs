@@ -1,3 +1,4 @@
+mod filter;
 mod pcap;
 mod pcapng;
 mod types;

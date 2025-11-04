@@ -46,6 +46,7 @@ defmodule PcapFileEx.TCPReassemblyTest do
       assert message.http.type == :response
       assert message.http.status_code == 200
       assert message.http.body == "PONG!"
+
       assert message.flow ==
                {Endpoint.new("127.0.0.1", 443), Endpoint.new("127.0.0.1", 5000)}
     end

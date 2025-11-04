@@ -3,7 +3,7 @@ defmodule PcapFileEx.Stream do
   Stream protocol implementation for lazy packet reading.
   """
 
-  alias PcapFileEx.Pcap
+  alias PcapFileEx.{Pcap, PcapNg}
 
   @doc """
   Creates a lazy stream of packets from a PCAP file.
@@ -43,22 +43,40 @@ defmodule PcapFileEx.Stream do
   Creates a lazy stream of packets from an already opened reader.
 
   This does NOT automatically close the reader when done.
+  Works with both PCAP and PCAPNG readers.
 
   ## Examples
 
       {:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
-
       PcapFileEx.Stream.from_reader(reader)
       |> Enum.take(10)
-
       PcapFileEx.Pcap.close(reader)
+
+      {:ok, reader} = PcapFileEx.PcapNg.open("capture.pcapng")
+      PcapFileEx.Stream.from_reader(reader)
+      |> Enum.take(10)
+      PcapFileEx.PcapNg.close(reader)
   """
-  @spec from_reader(Pcap.t()) :: Enumerable.t()
-  def from_reader(reader) do
+  @spec from_reader(Pcap.t() | PcapNg.t()) :: Enumerable.t()
+  def from_reader(%Pcap{} = reader) do
     Stream.resource(
       fn -> reader end,
       fn reader ->
         case Pcap.next_packet(reader) do
+          {:ok, packet} -> {[packet], reader}
+          :eof -> {:halt, reader}
+          {:error, reason} -> raise "Failed to read packet: #{reason}"
+        end
+      end,
+      fn _reader -> :ok end
+    )
+  end
+
+  def from_reader(%PcapNg{} = reader) do
+    Stream.resource(
+      fn -> reader end,
+      fn reader ->
+        case PcapNg.next_packet(reader) do
           {:ok, packet} -> {[packet], reader}
           :eof -> {:halt, reader}
           {:error, reason} -> raise "Failed to read packet: #{reason}"

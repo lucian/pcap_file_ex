@@ -426,6 +426,173 @@ packets_in_range =
   |> Enum.to_list()
 ```
 
+### Pre-Filtering (High Performance)
+
+Pre-filtering applies filters in the Rust layer **before** packets are deserialized to Elixir,
+providing 10-100x speedup for selective queries on large files. This is particularly effective
+when you need to filter a small subset of packets from a large capture file.
+
+#### Basic Usage
+
+```elixir
+alias PcapFileEx.PreFilter
+
+# Open a reader
+{:ok, reader} = PcapFileEx.Pcap.open("large_capture.pcap")
+
+# Set pre-filters (filters are applied in Rust before deserialization)
+filters = [
+  PreFilter.protocol("tcp"),
+  PreFilter.port_dest(80)
+]
+:ok = PcapFileEx.Pcap.set_filter(reader, filters)
+
+# Stream only matching packets
+packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(100)
+
+# Always close when done
+PcapFileEx.Pcap.close(reader)
+```
+
+#### Works with Both Formats
+
+```elixir
+# PCAPNG format
+{:ok, reader} = PcapFileEx.PcapNg.open("capture.pcapng")
+:ok = PcapFileEx.PcapNg.set_filter(reader, [
+  PreFilter.ip_source_cidr("192.168.1.0/24"),
+  PreFilter.size_min(1000)
+])
+packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+PcapFileEx.PcapNg.close(reader)
+```
+
+#### Available Filter Types
+
+**IP Filters:**
+- `PreFilter.ip_source("1.2.3.4")` - Exact source IP match
+- `PreFilter.ip_dest("1.2.3.4")` - Exact destination IP match
+- `PreFilter.ip_source_cidr("192.168.0.0/16")` - Source IP in CIDR range
+- `PreFilter.ip_dest_cidr("10.0.0.0/8")` - Destination IP in CIDR range
+
+**Port Filters:**
+- `PreFilter.port_source(8080)` - Source port exact match
+- `PreFilter.port_dest(443)` - Destination port exact match
+- `PreFilter.port_source_range(8000, 9000)` - Source port in range
+- `PreFilter.port_dest_range(80, 443)` - Destination port in range
+
+**Protocol Filters:**
+- `PreFilter.protocol("tcp")` - TCP packets
+- `PreFilter.protocol("udp")` - UDP packets
+- `PreFilter.protocol("icmp")` - ICMP packets
+- `PreFilter.protocol("ipv4")` - IPv4 packets
+- `PreFilter.protocol("ipv6")` - IPv6 packets
+
+**Size Filters:**
+- `PreFilter.size_min(100)` - Minimum packet size
+- `PreFilter.size_max(1500)` - Maximum packet size
+- `PreFilter.size_range(100, 1500)` - Size in range
+
+**Timestamp Filters:**
+- `PreFilter.timestamp_min(unix_seconds)` - Packets after timestamp
+- `PreFilter.timestamp_max(unix_seconds)` - Packets before timestamp
+
+**Logical Operators:**
+- `PreFilter.all([filter1, filter2])` - AND (all must match)
+- `PreFilter.any([filter1, filter2])` - OR (any must match)
+- `PreFilter.negate(filter)` - NOT (invert filter)
+
+#### Complex Filters
+
+```elixir
+{:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
+
+# Find large TCP packets from specific subnet to port 80 or 443
+filters = [
+  PreFilter.protocol("tcp"),
+  PreFilter.ip_source_cidr("192.168.0.0/16"),
+  PreFilter.any([
+    PreFilter.port_dest(80),
+    PreFilter.port_dest(443)
+  ]),
+  PreFilter.size_min(1000)
+]
+
+:ok = PcapFileEx.Pcap.set_filter(reader, filters)
+packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+PcapFileEx.Pcap.close(reader)
+```
+
+#### Performance Benefits
+
+Pre-filtering provides dramatic performance improvements:
+
+| Scenario | Post-Filter (Elixir) | Pre-Filter (Rust) | Speedup |
+|----------|---------------------|-------------------|---------|
+| UDP packets (50% match) | 568ms | 81ms | **7.0x** |
+| TCP port 80 (1% match) | 577ms | 22ms | **26.2x** |
+| Combined filters (<0.1%) | 577ms | 11ms | **52.5x** |
+
+**Why so fast?**
+- Packets are filtered in Rust before creating Elixir terms
+- Non-matching packets never allocate memory in the BEAM
+- Dramatically reduced garbage collection pressure
+- Most effective when filtering a small percentage of packets
+
+#### When to Use Pre-Filtering
+
+**Use pre-filtering when:**
+- Processing large capture files (>100MB)
+- Filtering for a small subset of packets (<10% match rate)
+- Need maximum performance
+- Running in production with memory constraints
+
+**Use post-filtering when:**
+- Small capture files (<10MB)
+- Complex logic requiring Elixir (decoded protocol fields, etc.)
+- High match rate (>80% of packets match)
+- Exploratory analysis where flexibility matters
+
+#### Clearing Filters
+
+```elixir
+{:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
+
+# Set a filter
+:ok = PcapFileEx.Pcap.set_filter(reader, [PreFilter.protocol("tcp")])
+
+# Clear it to read all packets again
+:ok = PcapFileEx.Pcap.clear_filter(reader)
+
+packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+PcapFileEx.Pcap.close(reader)
+```
+
+#### Combining Pre and Post Filtering
+
+```elixir
+{:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
+
+# Pre-filter: Fast coarse filtering in Rust
+:ok = PcapFileEx.Pcap.set_filter(reader, [
+  PreFilter.protocol("tcp"),
+  PreFilter.port_dest(80)
+])
+
+# Post-filter: Fine-grained filtering in Elixir
+http_get_requests =
+  PcapFileEx.Stream.from_reader(reader)
+  |> Enum.filter(fn packet ->
+    # Complex logic that needs decoded data
+    case PcapFileEx.Packet.decode_http(packet) do
+      {:ok, http} -> http.method == "GET"
+      _ -> false
+    end
+  end)
+
+PcapFileEx.Pcap.close(reader)
+```
+
 ### Filtering by Protocol
 
 ```elixir

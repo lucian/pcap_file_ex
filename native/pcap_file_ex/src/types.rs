@@ -81,6 +81,29 @@ pub(crate) fn datalink_to_string(datalink: &DataLink) -> String {
     }
 }
 
+pub(crate) fn parse_datalink_string(datalink_str: &str) -> DataLink {
+    match datalink_str.to_lowercase().as_str() {
+        "ethernet" => DataLink::ETHERNET,
+        "raw" => DataLink::RAW,
+        "ipv4" => DataLink::IPV4,
+        "ipv6" => DataLink::IPV6,
+        "ieee802_11" => DataLink::IEEE802_11,
+        "linux_sll" => DataLink::LINUX_SLL,
+        "linux_sll2" => DataLink::LINUX_SLL2,
+        "null" => DataLink::NULL,
+        "loop" => DataLink::LOOP,
+        "ppp" => DataLink::PPP,
+        _ => {
+            if let Some(num_str) = datalink_str.strip_prefix("unknown_") {
+                if let Ok(num) = num_str.parse::<u32>() {
+                    return DataLink::Unknown(num);
+                }
+            }
+            DataLink::ETHERNET // Default fallback
+        }
+    }
+}
+
 fn ts_resolution_to_string(ts_resolution: &TsResolution) -> String {
     match ts_resolution {
         TsResolution::MicroSecond => "microsecond".to_string(),

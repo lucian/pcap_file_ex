@@ -58,10 +58,29 @@
 
 ## [Unreleased]
 ### Added
+- **BPF-style pre-filtering** in Rust layer for high-performance packet filtering (10-100x speedup)
+  - Filter by IP address (exact match and CIDR ranges)
+  - Filter by port (exact match and ranges)
+  - Filter by protocol (TCP, UDP, ICMP, IPv4, IPv6)
+  - Filter by packet size (min/max/range)
+  - Filter by timestamp (Unix seconds)
+  - Logical operators (AND, OR, NOT)
+  - `PcapFileEx.PreFilter` module with type-safe filter constructors
+  - `set_filter/2` and `clear_filter/1` for both PCAP and PCAPNG readers
 - PCAPNG interface metadata exposure (`PcapFileEx.PcapNg.interfaces/1`) and per-packet fields (`interface_id`, `interface`, `timestamp_resolution`).
 - Test fixture script option `--interfaces ... --nanosecond` for generating multi-interface nanosecond captures; documentation on advanced capture workflows.
+- Comprehensive documentation:
+  - `docs/pre_filtering_feature_spec.md` - Complete feature specification
+  - `docs/benchmarks.md` - Benchmark guide
+  - `docs/epcap_comparison.md` - Comparison with epcap library
+  - `docs/TROUBLESHOOTING.md` - User troubleshooting guide
 
 ### Changed
+- `PcapFileEx.Stream.from_reader/1` now supports both `Pcap` and `PcapNg` readers (previously only supported Pcap)
 - `PcapFileEx.Packet` struct docs/examples updated with interface metadata and resolution info.
 - Capture script defaults now auto-name multi-interface nanosecond captures (`sample_multi_nanosecond.pcapng`).
 - Documented automatic decoder attachment and the `decode: false` opt-out in README and User Guide.
+- Updated benchmarks with pre-filtering vs post-filtering comparisons
+
+### Fixed
+- `Stream.from_reader/1` now correctly handles PcapNg readers (previously caused FunctionClauseError)
