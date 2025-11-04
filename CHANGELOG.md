@@ -84,3 +84,4 @@
 
 ### Fixed
 - `Stream.from_reader/1` now correctly handles PcapNg readers (previously caused FunctionClauseError)
+- **Security:** ETF (Erlang Term Format) decoding now uses `:safe` flag to prevent code execution from malicious PCAP files

@@ -264,7 +264,9 @@ defmodule PcapFileEx.HTTP do
   defp is_etf?(_), do: false
 
   defp decode_etf(body) do
-    :erlang.binary_to_term(body)
+    # Use :safe flag to prevent code execution from malicious PCAP files
+    # This prevents arbitrary code injection via specially crafted ETF payloads
+    :erlang.binary_to_term(body, [:safe])
   rescue
     _ -> body
   end
