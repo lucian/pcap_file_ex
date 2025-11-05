@@ -21,12 +21,14 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 
 ## Installation
 
-Add `pcap_file_ex` to your list of dependencies in `mix.exs`:
+### From Git (Current)
+
+Add `pcap_file_ex` as a Git dependency in your `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:pcap_file_ex, "~> 0.1.0"}
+    {:pcap_file_ex, git: "https://github.com/yourusername/pcap_file_ex.git"}
   ]
 end
 ```
@@ -40,8 +42,24 @@ mix compile
 
 **Requirements:**
 - Elixir ~> 1.19
-- Rust toolchain (for building native extensions)
+- **Rust toolchain** (cargo, rustc) - Required for compiling native extensions
 - Erlang/OTP 24+
+
+> **Note:** When using as a Git dependency, the Rust toolchain must be installed on your system. The native code will be compiled automatically during `mix compile`.
+
+### From Hex (Coming Soon)
+
+Once published to Hex, installation will be:
+
+```elixir
+def deps do
+  [
+    {:pcap_file_ex, "~> 0.1.0"}
+  ]
+end
+```
+
+Precompiled binaries will be available for common platforms (Linux, macOS, Windows), eliminating the need for a Rust toolchain.
 
 ## Quick Start
 

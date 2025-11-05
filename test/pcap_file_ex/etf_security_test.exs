@@ -19,10 +19,10 @@ defmodule PcapFileEx.ETFSecurityTest do
       # Create HTTP response payload with ETF body
       payload =
         "HTTP/1.1 200 OK\r\n" <>
-        "Content-Type: application/x-erlang-binary\r\n" <>
-        "Content-Length: #{byte_size(etf_binary)}\r\n" <>
-        "\r\n" <>
-        etf_binary
+          "Content-Type: application/x-erlang-binary\r\n" <>
+          "Content-Length: #{byte_size(etf_binary)}\r\n" <>
+          "\r\n" <>
+          etf_binary
 
       # Decode the HTTP message
       {:ok, http} = HTTP.decode(payload)
@@ -44,10 +44,10 @@ defmodule PcapFileEx.ETFSecurityTest do
 
       payload =
         "POST /api/endpoint HTTP/1.1\r\n" <>
-        "Content-Type: application/x-erlang-binary\r\n" <>
-        "Content-Length: #{byte_size(etf_binary)}\r\n" <>
-        "\r\n" <>
-        etf_binary
+          "Content-Type: application/x-erlang-binary\r\n" <>
+          "Content-Length: #{byte_size(etf_binary)}\r\n" <>
+          "\r\n" <>
+          etf_binary
 
       {:ok, http} = HTTP.decode(payload)
 
@@ -62,10 +62,10 @@ defmodule PcapFileEx.ETFSecurityTest do
 
       payload =
         "HTTP/1.1 200 OK\r\n" <>
-        "Content-Type: application/x-erlang-binary\r\n" <>
-        "Content-Length: #{byte_size(invalid_etf)}\r\n" <>
-        "\r\n" <>
-        invalid_etf
+          "Content-Type: application/x-erlang-binary\r\n" <>
+          "Content-Length: #{byte_size(invalid_etf)}\r\n" <>
+          "\r\n" <>
+          invalid_etf
 
       # Should return raw body on decode failure
       {:ok, http} = HTTP.decode(payload)
@@ -98,9 +98,9 @@ defmodule PcapFileEx.ETFSecurityTest do
       # No content-type, should still detect ETF by magic byte
       payload =
         "HTTP/1.1 200 OK\r\n" <>
-        "Content-Length: #{byte_size(etf_binary)}\r\n" <>
-        "\r\n" <>
-        etf_binary
+          "Content-Length: #{byte_size(etf_binary)}\r\n" <>
+          "\r\n" <>
+          etf_binary
 
       {:ok, http} = HTTP.decode(payload)
       assert http.decoded_body == term
@@ -118,10 +118,10 @@ defmodule PcapFileEx.ETFSecurityTest do
 
       payload =
         "POST /binary HTTP/1.1\r\n" <>
-        "Content-Type: application/x-erlang-binary\r\n" <>
-        "Content-Length: #{byte_size(etf_binary)}\r\n" <>
-        "\r\n" <>
-        etf_binary
+          "Content-Type: application/x-erlang-binary\r\n" <>
+          "Content-Length: #{byte_size(etf_binary)}\r\n" <>
+          "\r\n" <>
+          etf_binary
 
       {:ok, http} = HTTP.decode(payload)
       assert http.decoded_body["binary_field"] == <<0, 1, 2, 3, 4, 5>>
@@ -134,10 +134,10 @@ defmodule PcapFileEx.ETFSecurityTest do
 
       payload =
         "HTTP/1.1 200 OK\r\n" <>
-        "Content-Type: text/plain\r\n" <>
-        "Content-Length: #{byte_size(plain_data)}\r\n" <>
-        "\r\n" <>
-        plain_data
+          "Content-Type: text/plain\r\n" <>
+          "Content-Length: #{byte_size(plain_data)}\r\n" <>
+          "\r\n" <>
+          plain_data
 
       {:ok, http} = HTTP.decode(payload)
       assert http.decoded_body == plain_data
