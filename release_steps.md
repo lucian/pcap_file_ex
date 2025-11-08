@@ -54,3 +54,15 @@ $ rm checksum-Elixir.PcapFileEx.Native.exs
 mix.exs
 4:  @version "0.1.4-dev"
 ```
+
+## Troubleshoot
+
+- re-tagging - remove existing tag
+
+```
+# delete tag on local
+git tag -d v0.1.3
+
+# delete tag on on remote
+git push origin :refs/tags/v0.1.3
+```

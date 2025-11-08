@@ -18,8 +18,6 @@ on:
       - ".github/workflows/release.yml"
   workflow_dispatch:
 
-name: Precomp NIFs
-
 jobs:
   build_release:
     name: NIF ${{ matrix.nif }} - ${{ matrix.job.target }} (${{ matrix.job.os }} | ${{ matrix.job.variant || 'default' }})
