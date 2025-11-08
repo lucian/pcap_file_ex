@@ -1,0 +1,34 @@
+name: Rust CI
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "native/**"
+  pull_request:
+    paths:
+      - "native/**"
+  workflow_dispatch:
+
+jobs:
+  lint-rust:
+    name: Lint Rust
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        manifest:
+          - native/pcap_file_ex/Cargo.toml
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native/pcap_file_ex
+
+      - name: run rustfmt
+        run: cargo fmt --manifest-path=${{ matrix.manifest }} --all -- --check
+
+      - name: run clippy
+        run: cargo clippy --manifest-path=${{ matrix.manifest }} -- -Dwarnings

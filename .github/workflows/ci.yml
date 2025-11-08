@@ -1,0 +1,94 @@
+name: Elixir CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PCAP_FILE_EX_BUILD: true
+  MIX_ENV: test
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - otp_version: 27.3
+            elixir_version: 1.18.4
+
+          - otp_version: 28.1
+            elixir_version: 1.19.1
+
+    runs-on: ubuntu-latest
+    name: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            _build/test/lib/pcap_file_ex/native/pcap_file_ex
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            native/pcap_file_ex/target/
+          key: test-native-${{ runner.os }}-${{ hashFiles('native/**/Cargo.lock') }}
+          restore-keys: |
+            test-native-${{ runner.os }}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          elixir-version: ${{ matrix.elixir_version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Compile deps
+        run: mix deps.compile
+
+      - name: Run tests
+        run: mix test --warnings-as-errors
+
+      - name: Check formatting
+        run: mix format --check-formatted
+        if: matrix.elixir_version == '1.19'
+
+  lint:
+    runs-on: ubuntu-latest
+    name: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 28.1.1
+          elixir-version: 1.19.2
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            native/pcap_file_ex/target/
+          key: lint-native-${{ runner.os }}-${{ hashFiles('native/**/Cargo.lock') }}
+          restore-keys: |
+            lint-native-${{ runner.os }}
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path=native/pcap_file_ex/Cargo.toml --all --check
+
+      - name: Run Clippy
+        run: cargo clippy --manifest-path=native/pcap_file_ex/Cargo.toml -- -Dwarnings
