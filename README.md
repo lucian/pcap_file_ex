@@ -791,12 +791,6 @@ Benchmarks cover:
 
 Benchee reports iterations-per-second (IPS), average/median runtimes, and memory usage for each scenario. Adjust the capture size, duration, or Benchee options inside `bench/pcap_parsing.exs` to explore additional workloads.
 
-## Documentation
-
-- [User Guide](docs/userguide.md) - Comprehensive usage guide with examples
-- [Implementation Plan](PLAN.md) - Architecture and implementation details
-- [Developer Guide](CLAUDE.md) - Guide for contributors
-
 ## Architecture
 
 PcapFileEx is a hybrid Elixir/Rust project:

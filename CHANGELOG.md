@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+
+### Changed
+- improved documentation
+
+### Fixed
+
+## [0.1.5] - 2025-11-08
+
+### Added
 - **Expanded platform support with CPU variants** (inspired by [elixir-explorer/explorer](https://github.com/elixir-explorer/explorer))
   - Added FreeBSD support (`x86_64-unknown-freebsd`)
   - Implemented CPU capability detection for automatic legacy artifact selection
@@ -21,10 +30,10 @@
     - `x86_64-unknown-freebsd--legacy_cpu` (FreeBSD, legacy CPUs)
 - **Automatic CPU detection** - Linux x86_64 systems automatically select the appropriate binary variant based on CPU capabilities (AVX, FMA, SSE4.2, etc.)
 - **Manual legacy override** - Set `PCAP_FILE_EX_USE_LEGACY_ARTIFACTS=1` to force legacy CPU variants on any platform
-- `PcapFileEx.ComptimeUtils` module for compile-time CPU capability detection
+- Compile-time CPU capability detection for automatic binary selection
 
 ### Changed
-- Updated `PcapFileEx.Native` configuration to match elixir-explorer/explorer best practices
+- Updated NIF configuration to match elixir-explorer/explorer best practices
 - Reorganized target list alphabetically for better maintainability
 - Enhanced checksum file to include all platform variants
 
@@ -200,7 +209,7 @@
 - Updated benchmarks with pre-filtering vs post-filtering comparisons
 
 ### Fixed
-- `Stream.from_reader/1` now correctly handles PcapNg readers (previously caused FunctionClauseError)
+- `PcapFileEx.Stream.from_reader/1` now correctly handles PcapNg readers (previously caused FunctionClauseError)
 - **Security:** ETF (Erlang Term Format) decoding now uses `:safe` flag to prevent code execution from malicious PCAP files
 - **Cross-platform:** Test fixture generation scripts now work on both macOS and Linux
   - Auto-detect loopback interface (`lo` on Linux, `lo0` on macOS)

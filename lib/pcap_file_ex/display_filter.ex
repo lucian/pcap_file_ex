@@ -8,7 +8,7 @@ defmodule PcapFileEx.DisplayFilter do
       |> PcapFileEx.DisplayFilter.filter("ip.src == 127.0.0.1 && tcp.srcport == 8899")
       |> Enum.to_list()
 
-  See `PcapFileEx.DisplayFilter.FieldRegistry.fields/0` for available field identifiers.
+  Supports standard fields like `ip.src`, `ip.dst`, `tcp.srcport`, `tcp.dstport`, `udp.srcport`, `udp.dstport`, and others.
   """
 
   alias PcapFileEx.Packet

@@ -1,7 +1,7 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.1.5"
+  @version "0.1.6-dev"
   @source_url "https://github.com/lucian/pcap_file_ex"
   @dev? String.ends_with?(@version, "-dev")
   @force_build? System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]
@@ -73,7 +73,14 @@ defmodule PcapFileEx.MixProject do
       main: "readme",
       extras: [
         "README.md",
-        "CHANGELOG.md"
+        "CHANGELOG.md",
+        "usage-rules.md",
+        "usage-rules/performance.md",
+        "usage-rules/filtering.md",
+        "usage-rules/http.md",
+        "usage-rules/formats.md",
+        "usage-rules/examples.md",
+        "LICENSE"
       ],
       source_ref: "v#{@version}",
       source_url: @source_url
