@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+### Fixed
+- **PCAP nanosecond precision support**: Fixed Linux PCAP file parsing failure. The Elixir validator was only checking for microsecond-precision magic numbers (0xD4C3B2A1, 0xA1B2C3D4) and rejecting nanosecond-precision files (0x4D3CB2A1, 0xA1B23C4D) before they reached the Rust NIF. Added support for all four PCAP magic number variants in both `PcapFileEx.Validator` and `PcapFileEx` modules. The underlying pcap-file Rust crate already supported all formats.
+- **Cross-platform compatibility**: Linux dumpcap defaults to nanosecond precision while macOS uses microsecond precision. Both formats are now fully supported with automatic detection and no timestamp conversion.
+
+### Added
+- Comprehensive timestamp precision tests (`test/pcap_file_ex/timestamp_precision_test.exs`) covering microsecond and nanosecond PCAP formats, PCAPNG compatibility, and cross-platform support (15 test cases).
+- Detailed implementation documentation (`docs/FIX_LINUX_NANOSECOND_PCAP.md`) explaining the investigation, root cause, and fix.
+
 ## [69e8fdc] - 2025-11-03
 ### Added
 - Wireshark-style display filter engine (`PcapFileEx.DisplayFilter`) with inline `filter/2`, reusable `compile/1` + `run/2`, and parser support for boolean/relational operators.

@@ -9,10 +9,12 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **Memory Efficient** - Lazy streaming support for large files
 - ✅ **Type Safe** - Elixir structs with proper typespecs
 - ✅ **Simple API** - Easy-to-use functions for common tasks
-- ✅ **PCAP Support** - Read legacy PCAP format files
+- ✅ **PCAP Support** - Read legacy PCAP format files (microsecond and nanosecond precision)
 - ✅ **PCAPNG Support** - Read next-generation PCAPNG format files
 - ✅ **Interface Metadata** - Surface interface descriptors and timestamp resolution from PCAPNG captures
+- ✅ **Timestamp Precision** - Automatic detection and support for both microsecond and nanosecond timestamp formats
 - ✅ **Auto-Detection** - Automatic format detection based on magic numbers
+- ✅ **Cross-Platform** - Works with PCAP files from macOS (microsecond) and Linux (nanosecond) without conversion
 - ✅ **TCP Reassembly** - Reassemble HTTP messages split across multiple TCP packets
 - ✅ **HTTP Body Decoding** - Automatic decoding of JSON, ETF, form data, and text bodies
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
@@ -442,6 +444,50 @@ PcapFileEx.DisplayFilter.FieldRegistry.fields()
 true = PcapFileEx.Validator.pcap?("capture.pcap")
 {:ok, size} = PcapFileEx.Validator.file_size("capture.pcap")
 ```
+
+## Timestamp Precision Support
+
+PcapFileEx automatically detects and supports both **microsecond** and **nanosecond** timestamp precision in PCAP files:
+
+### PCAP Magic Numbers
+
+PCAP files identify their format and timestamp precision via magic numbers in the file header:
+
+| Magic Number | Endianness | Timestamp Precision | Default Platform |
+|--------------|------------|-------------------|------------------|
+| `0xD4C3B2A1` | Little-endian | Microsecond (µs) | macOS dumpcap |
+| `0xA1B2C3D4` | Big-endian | Microsecond (µs) | - |
+| `0x4D3CB2A1` | Little-endian | Nanosecond (ns) | Linux dumpcap |
+| `0xA1B23C4D` | Big-endian | Nanosecond (ns) | - |
+
+### Cross-Platform Compatibility
+
+**All formats are automatically detected and supported** without configuration:
+
+```elixir
+# macOS PCAP (microsecond precision)
+{:ok, macos_reader} = PcapFileEx.Pcap.open("capture_macos.pcap")
+assert macos_reader.header.ts_resolution == "microsecond"
+
+# Linux PCAP (nanosecond precision)
+{:ok, linux_reader} = PcapFileEx.Pcap.open("capture_linux.pcap")
+assert linux_reader.header.ts_resolution == "nanosecond"
+
+# Both formats read packets identically
+{:ok, packets} = PcapFileEx.Pcap.read_all("any_pcap_file.pcap")
+```
+
+### No Timestamp Conversion
+
+Timestamps are **preserved in their original precision** - there is no automatic conversion between microsecond and nanosecond formats. This ensures:
+
+- ✅ Data integrity - original capture precision maintained
+- ✅ Lossless processing - no rounding or truncation
+- ✅ Cross-platform consistency - files from different OSes work identically
+
+### PCAPNG Format
+
+PCAPNG files have their own timestamp resolution metadata and are fully supported on all platforms.
 
 ## Data Structures
 

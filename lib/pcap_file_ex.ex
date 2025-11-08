@@ -44,8 +44,15 @@ defmodule PcapFileEx do
   alias PcapFileEx.{Packet, Pcap, PcapNg, Stream}
 
   # Magic numbers for file format detection
-  @pcap_magic_le <<0xD4, 0xC3, 0xB2, 0xA1>>
-  @pcap_magic_be <<0xA1, 0xB2, 0xC3, 0xD4>>
+  # PCAP - microsecond precision
+  @pcap_magic_le_usec <<0xD4, 0xC3, 0xB2, 0xA1>>
+  @pcap_magic_be_usec <<0xA1, 0xB2, 0xC3, 0xD4>>
+
+  # PCAP - nanosecond precision
+  @pcap_magic_le_nsec <<0x4D, 0x3C, 0xB2, 0xA1>>
+  @pcap_magic_be_nsec <<0xA1, 0xB2, 0x3C, 0x4D>>
+
+  # PCAPNG
   @pcapng_magic <<0x0A, 0x0D, 0x0D, 0x0A>>
 
   @doc """
@@ -142,10 +149,16 @@ defmodule PcapFileEx do
       {:ok, file} ->
         result =
           case IO.binread(file, 4) do
-            @pcap_magic_le ->
+            @pcap_magic_le_usec ->
               :pcap
 
-            @pcap_magic_be ->
+            @pcap_magic_be_usec ->
+              :pcap
+
+            @pcap_magic_le_nsec ->
+              :pcap
+
+            @pcap_magic_be_nsec ->
               :pcap
 
             @pcapng_magic ->
