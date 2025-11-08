@@ -60,8 +60,8 @@ jobs:
         id: version
         shell: bash
         run: |
-          # Extract version using Mix (same method as lib/pcap_file_ex/native.ex)
-          VERSION=$(mix eval 'IO.puts(Mix.Project.config()[:version])' 2>/dev/null | tail -1)
+          # Extract version from mix.exs @version module attribute
+          VERSION=$(grep '@version' mix.exs | head -1 | sed -n 's/.*@version "\(.*\)".*/\1/p')
 
           # Validate version was extracted
           if [ -z "$VERSION" ]; then
