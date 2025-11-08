@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.1.4] - 2025-11-08
+- Improve CI/CD pipeline
+
 ## [0.1.3] - 2025-11-08
 
 ### Fixed
