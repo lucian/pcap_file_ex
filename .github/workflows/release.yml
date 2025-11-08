@@ -134,9 +134,14 @@ jobs:
     name: Generate and upload checksums
     needs: create_release
     runs-on: ubuntu-22.04
+    env:
+      PCAP_FILE_EX_BUILD: true
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.91.0
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
