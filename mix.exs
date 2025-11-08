@@ -10,7 +10,7 @@ defmodule PcapFileEx.MixProject do
     [
       app: :pcap_file_ex,
       version: @version,
-      elixir: "~> 1.19",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
@@ -103,8 +103,6 @@ defmodule PcapFileEx.MixProject do
     File.rm("test/fixtures/new_test.pcapng")
     File.rm("test/fixtures/test_valid_data.pcap")
     File.rm("test/fixtures/test_valid_data.pcapng")
-    File.rm("test/fixtures/linux_new_test.pcap")
-    File.rm("test/fixtures/linux_new_test.pcapng")
     File.rm("test/fixtures/large_capture.pcap")
     File.rm("test/fixtures/large_capture.pcapng")
     File.rm("test/fixtures/http_load.log")
