@@ -61,7 +61,11 @@ pub fn pcapng_next_packet(
                 let interface = state
                     .interfaces()
                     .get(packet_block.interface_id as usize)
-                    .ok_or_else(|| Error::Term(Box::new("Missing interface description for packet".to_string())))?
+                    .ok_or_else(|| {
+                        Error::Term(Box::new(
+                            "Missing interface description for packet".to_string(),
+                        ))
+                    })?
                     .clone();
 
                 let interface_map = interface_to_map(packet_block.interface_id, &interface)

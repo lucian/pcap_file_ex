@@ -1,7 +1,7 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.1.3"
+  @version "0.1.4-dev"
   @source_url "https://github.com/lucian/pcap_file_ex"
   @dev? String.ends_with?(@version, "-dev")
   @force_build? System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]
@@ -82,7 +82,12 @@ defmodule PcapFileEx.MixProject do
 
   defp aliases do
     [
-      clean: ["clean", &clean_native/1]
+      clean: ["clean", &clean_native/1],
+      "rust.lint": [
+        "cmd cargo clippy --manifest-path=native/pcap_file_ex/Cargo.toml -- -Dwarnings"
+      ],
+      "rust.fmt": ["cmd cargo fmt --manifest-path=native/pcap_file_ex/Cargo.toml --all"],
+      ci: ["format", "rust.fmt", "rust.lint", "test"]
     ]
   end
 

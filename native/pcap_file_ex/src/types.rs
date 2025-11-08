@@ -1,9 +1,8 @@
-use pcap_file::PcapError;
 use pcap_file::pcap::{PcapHeader, PcapPacket};
 use pcap_file::pcapng::blocks::interface_description::{
-    InterfaceDescriptionBlock, InterfaceDescriptionOption,
-    TsResolution as InterfaceTsResolution,
+    InterfaceDescriptionBlock, InterfaceDescriptionOption, TsResolution as InterfaceTsResolution,
 };
+use pcap_file::PcapError;
 use pcap_file::{DataLink, Endianness, TsResolution};
 use rustler::NifMap;
 

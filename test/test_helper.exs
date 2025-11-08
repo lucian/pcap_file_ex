@@ -3,7 +3,8 @@ Application.put_env(:mix, :start_pubsub, false)
 # Auto-generate missing test fixtures
 defmodule TestFixtureSetup do
   @fixtures_dir "test/fixtures"
-  @critical_fixtures ["new_test.pcapng"]  # Fixtures that cause test failures
+  # Fixtures that cause test failures
+  @critical_fixtures ["new_test.pcapng"]
 
   def ensure_fixtures do
     missing = find_missing_critical_fixtures()

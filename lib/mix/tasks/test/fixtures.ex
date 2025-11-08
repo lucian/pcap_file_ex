@@ -129,6 +129,7 @@ defmodule Mix.Tasks.Test.Fixtures do
         Mix.shell().error("")
         Mix.shell().error(output)
         Mix.shell().error("")
+
         Mix.shell().error("""
         Troubleshooting:
         - Ensure dumpcap has proper permissions (see README.md)

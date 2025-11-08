@@ -36,10 +36,12 @@ pub fn pcap_get_header(resource: ResourceArc<PcapReaderResource>) -> Result<Head
 }
 
 #[rustler::nif]
-pub fn pcap_next_packet(resource: ResourceArc<PcapReaderResource>) -> Result<Option<PacketMap>, Error> {
+pub fn pcap_next_packet(
+    resource: ResourceArc<PcapReaderResource>,
+) -> Result<Option<PacketMap>, Error> {
     let mut reader = resource.reader.lock().unwrap();
     let filter = resource.filter.lock().unwrap();
-    let datalink = reader.header().datalink.clone();
+    let datalink = reader.header().datalink;
 
     loop {
         match reader.next_packet() {

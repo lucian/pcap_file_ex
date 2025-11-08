@@ -52,9 +52,9 @@ impl FilterContext {
             return true;
         }
 
-        self.filters
-            .iter()
-            .all(|filter| self.evaluate_filter(filter, packet_data, datalink, orig_len, timestamp_secs))
+        self.filters.iter().all(|filter| {
+            self.evaluate_filter(filter, packet_data, datalink, orig_len, timestamp_secs)
+        })
     }
 
     fn evaluate_filter(
@@ -76,12 +76,12 @@ impl FilterContext {
             PacketFilter::TimestampMax(max) => timestamp_secs <= *max,
 
             // Logical operators
-            PacketFilter::And(filters) => filters.iter().all(|f| {
-                self.evaluate_filter(f, packet_data, datalink, orig_len, timestamp_secs)
-            }),
-            PacketFilter::Or(filters) => filters.iter().any(|f| {
-                self.evaluate_filter(f, packet_data, datalink, orig_len, timestamp_secs)
-            }),
+            PacketFilter::And(filters) => filters
+                .iter()
+                .all(|f| self.evaluate_filter(f, packet_data, datalink, orig_len, timestamp_secs)),
+            PacketFilter::Or(filters) => filters
+                .iter()
+                .any(|f| self.evaluate_filter(f, packet_data, datalink, orig_len, timestamp_secs)),
             PacketFilter::Not(filter) => {
                 !self.evaluate_filter(filter, packet_data, datalink, orig_len, timestamp_secs)
             }
@@ -138,7 +138,9 @@ impl FilterContext {
             PacketFilter::PortSourceRange(min, max) => {
                 self.check_source_port_range(&parsed, *min, *max)
             }
-            PacketFilter::PortDestRange(min, max) => self.check_dest_port_range(&parsed, *min, *max),
+            PacketFilter::PortDestRange(min, max) => {
+                self.check_dest_port_range(&parsed, *min, *max)
+            }
             _ => false,
         }
     }
@@ -171,12 +173,8 @@ impl FilterContext {
 
     fn check_source_ip(&self, parsed: &SlicedPacket, target_ip: &IpAddr) -> bool {
         match &parsed.net {
-            Some(NetSlice::Ipv4(ipv4)) => {
-                IpAddr::V4(ipv4.header().source_addr()) == *target_ip
-            }
-            Some(NetSlice::Ipv6(ipv6)) => {
-                IpAddr::V6(ipv6.header().source_addr()) == *target_ip
-            }
+            Some(NetSlice::Ipv4(ipv4)) => IpAddr::V4(ipv4.header().source_addr()) == *target_ip,
+            Some(NetSlice::Ipv6(ipv6)) => IpAddr::V6(ipv6.header().source_addr()) == *target_ip,
             None => false,
         }
     }
