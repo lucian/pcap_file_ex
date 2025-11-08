@@ -1,7 +1,7 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.1.2"
+  @version "0.1.3"
   @source_url "https://github.com/lucian/pcap_file_ex"
   @dev? String.ends_with?(@version, "-dev")
   @force_build? System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]
@@ -50,6 +50,7 @@ defmodule PcapFileEx.MixProject do
         "native/pcap_file_ex/src",
         "native/pcap_file_ex/Cargo.toml",
         "native/pcap_file_ex/Cargo.lock",
+        "checksum-*.exs",
         "mix.exs",
         "README.md",
         "LICENSE",

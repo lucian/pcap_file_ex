@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3] - 2025-11-08
+
+### Fixed
+- **CRITICAL**: Include checksum files in Hex package to enable precompiled NIF downloads
+  - Added `checksum-*.exs` to package files list in mix.exs
+  - Users can now install from Hex without requiring Rust compiler
+  - Previously, checksums were only on GitHub releases but not in Hex package
+  - This caused `RuntimeError: the precompiled NIF file does not exist in the checksum file`
+  - Follows elixir-explorer/explorer best practices for rustler_precompiled
+
 ## [0.1.2] - 2025-11-08
 
 ### Added
