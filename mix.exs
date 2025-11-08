@@ -1,8 +1,10 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.1.2"
+  @version "0.1.2-dev"
   @source_url "https://github.com/lucian/pcap_file_ex"
+  @dev? String.ends_with?(@version, "-dev")
+  @force_build? System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]
 
   def project do
     [
@@ -109,7 +111,7 @@ defmodule PcapFileEx.MixProject do
   defp deps do
     [
       {:usage_rules, "~> 0.1", only: [:dev]},
-      {:rustler, "~> 0.37.1", runtime: false},
+      {:rustler, "~> 0.37.1", optional: not (@dev? or @force_build?)},
       {:rustler_precompiled, "~> 0.8"},
       {:pkt, "~> 0.6.0"},
       {:jason, "~> 1.4", optional: true},
