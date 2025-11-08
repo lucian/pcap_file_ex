@@ -21,6 +21,46 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
 - ✅ **Validation** - File format validation and accessibility checks
 
+## Supported Platforms
+
+PcapFileEx ships with precompiled NIFs for the following platforms (inspired by [elixir-explorer/explorer](https://github.com/elixir-explorer/explorer)):
+
+### ARM Architectures
+- **macOS (Apple Silicon)**: `aarch64-apple-darwin` - M1, M2, M3, M4 chips
+- **Linux (ARM64)**: `aarch64-unknown-linux-gnu` - Raspberry Pi 4/5, ARM servers
+
+### x86_64 Architectures
+- **macOS (Intel)**: `x86_64-apple-darwin` - Intel-based Macs
+- **Linux (Intel/AMD)**: `x86_64-unknown-linux-gnu` - Ubuntu, Debian, Fedora, RHEL, etc.
+- **Windows (MSVC)**: `x86_64-pc-windows-msvc` - Visual Studio toolchain
+- **Windows (GNU)**: `x86_64-pc-windows-gnu` - MinGW/MSYS2 toolchain
+- **FreeBSD**: `x86_64-unknown-freebsd` - FreeBSD 12+
+
+### CPU Variants
+
+For x86_64 platforms (Linux, Windows, FreeBSD), two binary variants are available:
+
+1. **Default** - Optimized with modern CPU features (AVX, FMA, SSE4.2, POPCNT)
+   - Best performance on CPUs from ~2013 onwards (Intel Haswell, AMD Excavator or newer)
+
+2. **Legacy CPU** - Compatible with older processors
+   - Use when you see "Illegal instruction" errors on older hardware
+   - Automatically selected on Linux based on CPU detection
+   - Manually enable with: `PCAP_FILE_EX_USE_LEGACY_ARTIFACTS=1`
+
+**Total precompiled binaries: 11** (7 base targets + 4 legacy variants)
+
+### Build from Source
+
+If your platform isn't listed or you prefer to compile locally:
+
+```bash
+# Force local compilation
+PCAP_FILE_EX_BUILD=1 mix deps.compile pcap_file_ex
+```
+
+**Requirements:** Rust toolchain (cargo, rustc) - tested with 1.91.0+
+
 ## Installation
 
 ### From Git (Current)
@@ -45,9 +85,12 @@ mix compile
 **Requirements:**
 - Elixir ~> 1.19 (tested with 1.19.2)
 - Erlang/OTP 28+ (tested with 28.1.1)
-- **Rust toolchain** (cargo, rustc) - Required for compiling native extensions (tested with 1.91.0)
+- **Rust toolchain** (cargo, rustc) - **Only required when**:
+  - Using as a Git dependency (not yet published to Hex)
+  - Forcing local build with `PCAP_FILE_EX_BUILD=1`
+  - Platform not in the supported platforms list above
 
-> **Note:** When using as a Git dependency, the Rust toolchain must be installed on your system. The native code will be compiled automatically during `mix compile`.
+> **Note:** When using as a Git dependency, the native code will be compiled automatically during `mix compile`. Once published to Hex, precompiled binaries will be used automatically for supported platforms.
 
 ### From Hex (Coming Soon)
 
@@ -61,7 +104,7 @@ def deps do
 end
 ```
 
-Precompiled binaries will be available for common platforms (Linux, macOS, Windows), eliminating the need for a Rust toolchain.
+Precompiled binaries will be downloaded automatically for supported platforms, eliminating the need for a Rust toolchain in most cases.
 
 ## AI-Assisted Development
 

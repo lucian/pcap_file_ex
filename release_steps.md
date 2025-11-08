@@ -38,22 +38,30 @@ git push origin v0.1.3
 $ PCAP_FILE_EX_BUILD=1 mix rustler_precompiled.download PcapFileEx.Native --all --print
 ```
 
-8. Publish to Hex
+8. !! MANUALLY PUBLISH THE RELEASE
+
+- go to https://github.com/lucian/pcap_file_ex/releases
+- selecte the release
+- add a comment
+- publish
+
+9. Publish to Hex
 ```
 $ PCAP_FILE_EX_BUILD=1 mix hex.publish
 ```
 
-9. Delete checksums
+10. Delete checksums
 ```
 $ rm checksum-Elixir.PcapFileEx.Native.exs
 ```
 
-10. Bump version to -dev
+11. Bump version to -dev
 
 ```
 mix.exs
 4:  @version "0.1.4-dev"
 ```
+
 
 ## Troubleshoot
 

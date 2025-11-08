@@ -1,5 +1,37 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Expanded platform support with CPU variants** (inspired by [elixir-explorer/explorer](https://github.com/elixir-explorer/explorer))
+  - Added FreeBSD support (`x86_64-unknown-freebsd`)
+  - Implemented CPU capability detection for automatic legacy artifact selection
+  - Added variant system for x86_64 platforms (Linux, Windows, FreeBSD)
+  - Now shipping **11 precompiled NIF artifacts** (up from 6):
+    - `aarch64-apple-darwin` (macOS ARM)
+    - `aarch64-unknown-linux-gnu` (Linux ARM)
+    - `x86_64-apple-darwin` (macOS Intel)
+    - `x86_64-unknown-linux-gnu` (Linux Intel/AMD)
+    - `x86_64-unknown-linux-gnu--legacy_cpu` (Linux Intel/AMD, legacy CPUs)
+    - `x86_64-pc-windows-msvc` (Windows MSVC)
+    - `x86_64-pc-windows-msvc--legacy_cpu` (Windows MSVC, legacy CPUs)
+    - `x86_64-pc-windows-gnu` (Windows GCC)
+    - `x86_64-pc-windows-gnu--legacy_cpu` (Windows GCC, legacy CPUs)
+    - `x86_64-unknown-freebsd` (FreeBSD)
+    - `x86_64-unknown-freebsd--legacy_cpu` (FreeBSD, legacy CPUs)
+- **Automatic CPU detection** - Linux x86_64 systems automatically select the appropriate binary variant based on CPU capabilities (AVX, FMA, SSE4.2, etc.)
+- **Manual legacy override** - Set `PCAP_FILE_EX_USE_LEGACY_ARTIFACTS=1` to force legacy CPU variants on any platform
+- `PcapFileEx.ComptimeUtils` module for compile-time CPU capability detection
+
+### Changed
+- Updated `PcapFileEx.Native` configuration to match elixir-explorer/explorer best practices
+- Reorganized target list alphabetically for better maintainability
+- Enhanced checksum file to include all platform variants
+
+### Fixed
+- Legacy CPU support for systems without AVX/FMA instruction sets
+- Checksum generation now covers all 11 artifacts instead of only 6
+
 ## [0.1.4] - 2025-11-08
 - Improve CI/CD pipeline
 

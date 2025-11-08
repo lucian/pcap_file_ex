@@ -6,19 +6,45 @@ defmodule PcapFileEx.Native do
   version = mix_config[:version]
   github_url = "https://github.com/lucian/pcap_file_ex"
 
+  # Check if user wants to force using legacy CPU artifacts
+  use_legacy = System.get_env("PCAP_FILE_EX_USE_LEGACY_ARTIFACTS") in ["1", "true"]
+
+  # Variant configuration for Linux x86_64: automatically detect CPU capabilities
+  # and fall back to legacy_cpu variant if needed
+  variants_for_linux = [
+    legacy_cpu: fn ->
+      needed_caps = ~w[fxsr sse sse2 sse3 ssse3 sse4.1 sse4.2 popcnt avx fma]
+
+      use_legacy or
+        (is_nil(use_legacy) and
+           not PcapFileEx.ComptimeUtils.cpu_with_all_caps?(needed_caps))
+    end
+  ]
+
+  # Variant configuration for other x86_64 platforms (Windows, FreeBSD):
+  # only use legacy_cpu if explicitly requested via environment variable
+  other_variants = [legacy_cpu: fn -> use_legacy end]
+
   use RustlerPrecompiled,
     otp_app: :pcap_file_ex,
     crate: "pcap_file_ex",
     version: version,
     base_url: "#{github_url}/releases/download/v#{version}",
     targets: ~w(
-      x86_64-unknown-linux-gnu
+      aarch64-apple-darwin
       aarch64-unknown-linux-gnu
       x86_64-apple-darwin
-      aarch64-apple-darwin
-      x86_64-pc-windows-msvc
       x86_64-pc-windows-gnu
+      x86_64-pc-windows-msvc
+      x86_64-unknown-freebsd
+      x86_64-unknown-linux-gnu
     ),
+    variants: %{
+      "x86_64-unknown-linux-gnu" => variants_for_linux,
+      "x86_64-pc-windows-msvc" => other_variants,
+      "x86_64-pc-windows-gnu" => other_variants,
+      "x86_64-unknown-freebsd" => other_variants
+    },
     nif_versions: ["2.15"],
     force_build: System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]
 
