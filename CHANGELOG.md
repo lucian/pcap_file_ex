@@ -16,6 +16,17 @@
 ### Changed
 - Package files list now includes `usage-rules.md` and `usage-rules/` directory for HEX distribution
 - Added "Usage Rules" link to package metadata
+- Updated version requirements to Elixir 1.19.2 and Erlang/OTP 28.1.1
+- Updated Rust toolchain to 1.91.0 in GitHub Actions
+
+### Fixed
+- Updated GitHub Actions workflow to use current runner images
+  - Replaced deprecated `windows-2019` with `windows-latest`
+  - Updated `ubuntu-20.04` to `ubuntu-latest`
+  - Updated `macos-11` to `macos-13` (Intel) and `macos-14` (ARM)
+  - Upgraded actions to v4 (`checkout@v4`, `upload-artifact@v4`, `download-artifact@v4`)
+  - Updated Elixir to 1.19.2 and OTP to 28.1.1 in all jobs
+  - Pinned Rust version to 1.91.0 for reproducible builds
 
 ## [0.1.1] - 2025-11-08
 

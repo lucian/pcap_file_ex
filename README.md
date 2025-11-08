@@ -43,9 +43,9 @@ mix compile
 ```
 
 **Requirements:**
-- Elixir ~> 1.19
-- **Rust toolchain** (cargo, rustc) - Required for compiling native extensions
-- Erlang/OTP 24+
+- Elixir ~> 1.19 (tested with 1.19.2)
+- Erlang/OTP 28+ (tested with 28.1.1)
+- **Rust toolchain** (cargo, rustc) - Required for compiling native extensions (tested with 1.91.0)
 
 > **Note:** When using as a Git dependency, the Rust toolchain must be installed on your system. The native code will be compiled automatically during `mix compile`.
 
@@ -92,9 +92,9 @@ mix usage_rules.sync CLAUDE.md pcap_file_ex
 
 For developing and testing PcapFileEx, you'll need:
 
-- **Elixir** ~> 1.19
-- **Rust toolchain** (cargo, rustc) - For compiling native extensions
-- **Erlang/OTP** 24+
+- **Elixir** ~> 1.19 (tested with 1.19.2)
+- **Erlang/OTP** 28+ (tested with 28.1.1)
+- **Rust toolchain** (cargo, rustc) - For compiling native extensions (tested with 1.91.0)
 - **dumpcap** - For generating test fixtures (optional but recommended)
 - **Python 3** - For test traffic generation scripts
 
