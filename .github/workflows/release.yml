@@ -58,6 +58,7 @@ jobs:
 
       - name: Extract project version
         id: version
+        shell: bash
         run: |
           VERSION=$(grep 'version:' mix.exs | sed -n 's/.*version: "\(.*\)".*/\1/p')
           echo "PROJECT_VERSION=$VERSION" >> $GITHUB_ENV
