@@ -99,8 +99,6 @@ defmodule PcapFileEx.MixProject do
     File.rm_rf!("priv")
 
     # Clean generated test fixtures
-    File.rm("test/fixtures/new_test.pcap")
-    File.rm("test/fixtures/new_test.pcapng")
     File.rm("test/fixtures/test_valid_data.pcap")
     File.rm("test/fixtures/test_valid_data.pcapng")
     File.rm("test/fixtures/large_capture.pcap")
