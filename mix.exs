@@ -1,7 +1,7 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.1.1"
+  @version "0.1.2"
   @source_url "https://github.com/lucian/pcap_file_ex"
 
   def project do
@@ -51,12 +51,15 @@ defmodule PcapFileEx.MixProject do
         "mix.exs",
         "README.md",
         "LICENSE",
-        "CHANGELOG.md"
+        "CHANGELOG.md",
+        "usage-rules.md",
+        "usage-rules"
       ],
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,
-        "Changelog" => "#{@source_url}/blob/master/CHANGELOG.md"
+        "Changelog" => "#{@source_url}/blob/master/CHANGELOG.md",
+        "Usage Rules" => "#{@source_url}/blob/master/usage-rules.md"
       },
       maintainers: ["Lucian Parvu"]
     ]
@@ -105,12 +108,14 @@ defmodule PcapFileEx.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:usage_rules, "~> 0.1", only: [:dev]},
       {:rustler, "~> 0.37.1", runtime: false},
       {:rustler_precompiled, "~> 0.8"},
       {:pkt, "~> 0.6.0"},
       {:jason, "~> 1.4", optional: true},
       {:benchee, "~> 1.3", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:igniter, "~> 0.7.0"}
     ]
   end
 end

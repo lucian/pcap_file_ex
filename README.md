@@ -63,6 +63,29 @@ end
 
 Precompiled binaries will be available for common platforms (Linux, macOS, Windows), eliminating the need for a Rust toolchain.
 
+## AI-Assisted Development
+
+This library includes comprehensive usage rules for LLM-based coding assistants. If you're using AI tools like Claude Code, GitHub Copilot, or Cursor, the library provides detailed guidance to help generate correct, performant code.
+
+**For AI Assistants:** See [`usage-rules.md`](usage-rules.md) for complete API guidance, common patterns, and performance best practices.
+
+**Key guidance includes:**
+- Automatic format detection (always use `PcapFileEx.open/1`)
+- Filtering strategy selection (PreFilter for large files = 10-100x faster)
+- Resource management patterns
+- HTTP body auto-decoding
+- Performance optimization techniques
+
+To integrate with your AI workflow using the `usage_rules` package:
+
+```elixir
+# In your mix.exs
+{:usage_rules, "~> 0.1", only: [:dev]}
+
+# Then sync to your project's AI instructions
+mix usage_rules.sync CLAUDE.md pcap_file_ex
+```
+
 ## Development Setup
 
 ### Prerequisites

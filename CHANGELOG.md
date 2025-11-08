@@ -1,6 +1,21 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.2] - 2025-11-08
+
+### Added
+- **LLM-friendly usage rules**: Comprehensive documentation for AI coding assistants
+  - Main `usage-rules.md` with decision trees and common patterns
+  - Detailed sub-guides: `usage-rules/performance.md`, `filtering.md`, `http.md`, `formats.md`, `examples.md`
+  - Guidance on format auto-detection, resource management, and filtering strategies
+  - Performance optimization recommendations (PreFilter for 10-100x speedup)
+  - Common mistakes section with wrong vs correct patterns
+  - Complete working examples for real-world scenarios
+- Usage rules integrated with HEX package for distribution to dependencies
+- README section on AI-assisted development with integration instructions
+
+### Changed
+- Package files list now includes `usage-rules.md` and `usage-rules/` directory for HEX distribution
+- Added "Usage Rules" link to package metadata
 
 ## [0.1.1] - 2025-11-08
 
