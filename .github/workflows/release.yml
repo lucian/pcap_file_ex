@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
 jobs:
   build_release:
     name: Build NIF for ${{ matrix.job.target }} (${{ matrix.job.os }})
@@ -13,17 +18,17 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # Linux targets
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest }
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, use-cross: true }
+          # Linux targets - using Ubuntu 22.04 for glibc 2.35 compatibility
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04, use-cross: true }
 
           # macOS targets
           - { target: x86_64-apple-darwin, os: macos-13 }
           - { target: aarch64-apple-darwin, os: macos-14 }
 
           # Windows targets
-          - { target: x86_64-pc-windows-msvc, os: windows-latest }
-          - { target: x86_64-pc-windows-gnu, os: windows-latest }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022 }
+          - { target: x86_64-pc-windows-gnu, os: windows-2022 }
 
     steps:
       - name: Checkout source code
@@ -34,9 +39,12 @@ jobs:
         with:
           targets: ${{ matrix.job.target }}
 
-      - name: Install cross (Linux ARM)
-        if: matrix.job.use-cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v0-precomp
+          shared-key: ${{ matrix.job.target }}-2.15
+          workspaces: native/pcap_file_ex
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -48,51 +56,39 @@ jobs:
       - name: Install dependencies
         run: mix deps.get
 
-      - name: Build the NIF (cross)
-        if: matrix.job.use-cross
+      - name: Extract project version
+        id: version
         run: |
-          cd native/pcap_file_ex
-          cross build --release --target ${{ matrix.job.target }}
-        env:
-          RUSTFLAGS: "-C target-feature=-crt-static"
+          VERSION=$(grep 'version:' mix.exs | sed -n 's/.*version: "\(.*\)".*/\1/p')
+          echo "PROJECT_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build the NIF (native)
-        if: ${{ !matrix.job.use-cross }}
-        run: |
-          cd native/pcap_file_ex
-          cargo build --release --target ${{ matrix.job.target }}
-        env:
-          RUSTFLAGS: "-C target-feature=-crt-static"
+      - name: Build the project
+        id: build-crate
+        uses: philss/rustler-precompiled-action@v1.1.4
+        with:
+          project-name: pcap_file_ex
+          project-version: ${{ env.PROJECT_VERSION }}
+          target: ${{ matrix.job.target }}
+          nif-version: "2.15"
+          use-cross: ${{ matrix.job.use-cross }}
+          project-dir: "native/pcap_file_ex"
 
-      - name: Rename NIF for release (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cd native/pcap_file_ex/target/${{ matrix.job.target }}/release
-          mkdir -p ../../artifacts
-          if [ -f libpcap_file_ex.so ]; then
-            cp libpcap_file_ex.so ../../artifacts/libpcap_file_ex-${{ matrix.job.target }}.so
-          elif [ -f libpcap_file_ex.dylib ]; then
-            cp libpcap_file_ex.dylib ../../artifacts/libpcap_file_ex-${{ matrix.job.target }}.dylib
-          fi
-
-      - name: Rename NIF for release (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          cd native/pcap_file_ex/target/${{ matrix.job.target }}/release
-          mkdir -p ../../artifacts
-          cp pcap_file_ex.dll ../../artifacts/libpcap_file_ex-${{ matrix.job.target }}.dll
-        shell: bash
+      - name: Artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ steps.build-crate.outputs.file-path }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: nif-${{ matrix.job.target }}
-          path: native/pcap_file_ex/target/artifacts/
+          path: ${{ steps.build-crate.outputs.file-path }}
 
   create_release:
     name: Create GitHub Release
     needs: build_release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -118,7 +114,7 @@ jobs:
   publish_checksums:
     name: Generate and upload checksums
     needs: create_release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4

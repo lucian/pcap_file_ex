@@ -20,10 +20,28 @@
 - Updated Rust toolchain to 1.91.0 in GitHub Actions
 
 ### Fixed
-- Updated GitHub Actions workflow to use current runner images
-  - Replaced deprecated `windows-2019` with `windows-latest`
-  - Updated `ubuntu-20.04` to `ubuntu-latest`
-  - Updated `macos-11` to `macos-13` (Intel) and `macos-14` (ARM)
+- **Major GitHub Actions workflow improvements** (based on elixir-explorer/explorer best practices)
+  - **CRITICAL**: Switched from manual cargo builds to `rustler-precompiled-action@v1.1.4`
+    - Fixes artifact naming to match RustlerPrecompiled expectations: `pcap_file_ex-nif-2.15-{target}.tar.gz`
+    - Previously used incompatible naming: `libpcap_file_ex-{target}.so` (raw files)
+    - Ensures precompiled binary downloads work correctly
+  - **Compatibility**: Changed Linux builds from Ubuntu 24.04 to 22.04
+    - Better glibc compatibility (2.35 vs 2.39)
+    - Precompiled binaries work on more Linux distributions
+  - **Performance**: Added Rust caching with `Swatinem/rust-cache@v2`
+    - Expected 5-10x faster builds on subsequent runs
+    - Target-specific cache keys for optimal reuse
+  - **Security**: Added build attestation with `actions/attest-build-provenance@v1`
+    - Cryptographic proof of build provenance
+    - Enhanced supply chain security
+  - **Configuration**: Added explicit NIF version ("2.15") in Native module
+    - Required for OTP 28 compatibility
+    - Enables RustlerPrecompiled to match artifacts to OTP versions
+  - **Permissions**: Added workflow permissions (contents, id-token, attestations)
+  - Updated runner images:
+    - Linux: `ubuntu-22.04` (was ubuntu-24.04, ImageOS: ubuntu22)
+    - Windows: `windows-2022` (was windows-2019, ImageOS: win22)
+    - macOS: `macos-13` (Intel x86_64) and `macos-14` (ARM aarch64)
   - Upgraded actions to v4 (`checkout@v4`, `upload-artifact@v4`, `download-artifact@v4`)
   - Updated Elixir to 1.19.2 and OTP to 28.1.1 in all jobs
   - Pinned Rust version to 1.91.0 for reproducible builds
