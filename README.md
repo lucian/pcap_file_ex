@@ -30,7 +30,7 @@ Add `pcap_file_ex` as a Git dependency in your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:pcap_file_ex, git: "https://github.com/yourusername/pcap_file_ex.git"}
+    {:pcap_file_ex, git: "https://github.com/lucian/pcap_file_ex.git"}
   ]
 end
 ```
@@ -119,7 +119,7 @@ newgrp wireshark
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/pcap_file_ex.git
+git clone https://github.com/lucian/pcap_file_ex.git
 cd pcap_file_ex
 
 # Fetch dependencies
@@ -905,7 +905,7 @@ mix test.fixtures
 
 ### Still Having Issues?
 
-- Check GitHub Issues: https://github.com/yourusername/pcap_file_ex/issues
+- Check GitHub Issues: https://github.com/lucian/pcap_file_ex/issues
 - Read test/fixtures/README.md for detailed fixture documentation
 - Most tests will skip gracefully if fixtures are missing - only 4 tests require generated files
 

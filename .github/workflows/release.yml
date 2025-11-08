@@ -1,0 +1,142 @@
+name: Build Precompiled NIFs
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build_release:
+    name: Build NIF for ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # Linux targets
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-20.04, use-cross: true }
+
+          # macOS targets
+          - { target: x86_64-apple-darwin, os: macos-11 }
+          - { target: aarch64-apple-darwin, os: macos-11 }
+
+          # Windows targets
+          - { target: x86_64-pc-windows-msvc, os: windows-2019 }
+          - { target: x86_64-pc-windows-gnu, os: windows-2019 }
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.job.target }}
+
+      - name: Install cross (Linux ARM)
+        if: matrix.job.use-cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19'
+          otp-version: '27'
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Build the NIF (cross)
+        if: matrix.job.use-cross
+        run: |
+          cd native/pcap_file_ex
+          cross build --release --target ${{ matrix.job.target }}
+        env:
+          RUSTFLAGS: "-C target-feature=-crt-static"
+
+      - name: Build the NIF (native)
+        if: ${{ !matrix.job.use-cross }}
+        run: |
+          cd native/pcap_file_ex
+          cargo build --release --target ${{ matrix.job.target }}
+        env:
+          RUSTFLAGS: "-C target-feature=-crt-static"
+
+      - name: Rename NIF for release (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd native/pcap_file_ex/target/${{ matrix.job.target }}/release
+          mkdir -p ../../artifacts
+          if [ -f libpcap_file_ex.so ]; then
+            cp libpcap_file_ex.so ../../artifacts/libpcap_file_ex-${{ matrix.job.target }}.so
+          elif [ -f libpcap_file_ex.dylib ]; then
+            cp libpcap_file_ex.dylib ../../artifacts/libpcap_file_ex-${{ matrix.job.target }}.dylib
+          fi
+
+      - name: Rename NIF for release (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd native/pcap_file_ex/target/${{ matrix.job.target }}/release
+          mkdir -p ../../artifacts
+          cp pcap_file_ex.dll ../../artifacts/libpcap_file_ex-${{ matrix.job.target }}.dll
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: nif-${{ matrix.job.target }}
+          path: native/pcap_file_ex/target/artifacts/
+
+  create_release:
+    name: Create GitHub Release
+    needs: build_release
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish_checksums:
+    name: Generate and upload checksums
+    needs: create_release
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19'
+          otp-version: '27'
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Generate checksums
+        run: mix rustler_precompiled.download PcapFileEx.Native --all --print
+
+      - name: Upload checksum file
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          gh release upload $TAG checksum-*.exs --clobber
