@@ -61,6 +61,96 @@ end
 
 Precompiled binaries will be available for common platforms (Linux, macOS, Windows), eliminating the need for a Rust toolchain.
 
+## Development Setup
+
+### Prerequisites
+
+For developing and testing PcapFileEx, you'll need:
+
+- **Elixir** ~> 1.19
+- **Rust toolchain** (cargo, rustc) - For compiling native extensions
+- **Erlang/OTP** 24+
+- **dumpcap** - For generating test fixtures (optional but recommended)
+- **Python 3** - For test traffic generation scripts
+
+### Installing dumpcap
+
+dumpcap is used to generate test fixtures. While optional, some tests will be skipped without it.
+
+#### macOS
+
+```bash
+brew install wireshark
+```
+
+This installs dumpcap with ChmodBPF, allowing packet capture without sudo.
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+# Install dumpcap
+sudo apt-get install tshark
+
+# Setup non-root packet capture (recommended)
+sudo dpkg-reconfigure wireshark-common  # Select "Yes"
+sudo usermod -aG wireshark $USER
+newgrp wireshark  # Or logout/login to activate group
+```
+
+#### Linux (Fedora/RHEL)
+
+```bash
+sudo dnf install wireshark-cli
+sudo usermod -aG wireshark $USER
+newgrp wireshark
+```
+
+#### Linux (Arch)
+
+```bash
+sudo pacman -S wireshark-cli
+sudo usermod -aG wireshark $USER
+newgrp wireshark
+```
+
+### Running Tests
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/pcap_file_ex.git
+cd pcap_file_ex
+
+# Fetch dependencies
+mix deps.get
+
+# Compile (includes Rust NIF)
+mix compile
+
+# Run tests (auto-generates fixtures on first run)
+mix test
+```
+
+**Manual fixture generation:**
+
+```bash
+# Generate all fixtures
+mix test.fixtures
+
+# Or manually
+cd test/fixtures
+./capture_test_traffic.sh
+```
+
+### Verifying dumpcap Setup
+
+Check if dumpcap has proper permissions:
+
+```bash
+dumpcap -D
+```
+
+This should list available network interfaces. If you see a permission error, see the Troubleshooting section below.
+
 ## Quick Start
 
 ### Read all packets
@@ -634,6 +724,145 @@ PcapFileEx.stream("huge_10gb.pcap")
 - [ ] Packet writing capabilities
 - [ ] Protocol parsing helpers (Ethernet, IP, TCP, etc.)
 
+## Troubleshooting
+
+### Tests failing: "No such device" error
+
+**Symptoms:**
+```
+Error: Interface 'lo0' not found
+```
+
+**Cause:** Interface name mismatch between platforms.
+
+**Solution:**
+
+On macOS, loopback is `lo0`. On Linux, it's `lo`. The scripts auto-detect this, but if you're specifying interfaces manually:
+
+```bash
+# List available interfaces
+cd test/fixtures
+./capture_test_traffic.sh --list-interfaces
+
+# Use specific interface
+./capture_test_traffic.sh --interfaces en0  # macOS ethernet
+./capture_test_traffic.sh --interfaces eth0  # Linux ethernet
+```
+
+### Tests failing: "Permission denied" error
+
+**Symptoms:**
+```
+dumpcap: You don't have permission to capture on that device
+```
+
+**Cause:** dumpcap requires elevated privileges for packet capture.
+
+#### macOS Solutions
+
+**Option 1: Install via Homebrew (Recommended)**
+
+```bash
+brew install wireshark
+```
+
+Wireshark includes ChmodBPF, which grants packet capture permissions automatically.
+
+**Option 2: Grant Terminal Permission**
+
+1. Open System Preferences
+2. Go to Security & Privacy → Privacy → Input Monitoring
+3. Click the lock to make changes
+4. Add Terminal.app (or iTerm.app)
+
+**Verify it works:**
+
+```bash
+dumpcap -D  # Should list interfaces without error
+```
+
+#### Linux Solutions
+
+**Option 1: Wireshark Group (Recommended)**
+
+```bash
+# Configure Wireshark for non-root capture
+sudo dpkg-reconfigure wireshark-common  # Select "Yes"
+
+# Add your user to the wireshark group
+sudo usermod -aG wireshark $USER
+
+# Activate the group (or logout/login)
+newgrp wireshark
+
+# Verify it works
+dumpcap -D  # Should list interfaces without error
+```
+
+**Option 2: Set Capabilities Manually**
+
+```bash
+# Give dumpcap specific capabilities
+sudo setcap cap_net_raw,cap_net_admin=eip $(which dumpcap)
+
+# Verify
+dumpcap -D
+```
+
+**Option 3: Run with sudo (Least Secure)**
+
+```bash
+cd test/fixtures
+sudo ./capture_test_traffic.sh
+```
+
+This works but requires entering your password and running the entire script as root.
+
+### Tests skipped: "Missing dumpcap"
+
+If dumpcap isn't installed, tests that require generated fixtures will be skipped. This is normal.
+
+To fix, install dumpcap (see Development Setup above) and run:
+
+```bash
+mix test.fixtures
+```
+
+### Fixture generation fails
+
+**Debug steps:**
+
+1. **Check dumpcap is in PATH:**
+   ```bash
+   which dumpcap
+   dumpcap -v
+   ```
+
+2. **Check permissions:**
+   ```bash
+   dumpcap -D  # Should list interfaces
+   ```
+
+3. **Try manual generation:**
+   ```bash
+   cd test/fixtures
+   ./capture_test_traffic.sh --list-interfaces
+   ./capture_test_traffic.sh
+   ```
+
+4. **Check Python is available:**
+   ```bash
+   python3 --version
+   ```
+
+5. **Look at script output:** The capture scripts provide detailed error messages.
+
+### Still Having Issues?
+
+- Check GitHub Issues: https://github.com/yourusername/pcap_file_ex/issues
+- Read test/fixtures/README.md for detailed fixture documentation
+- Most tests will skip gracefully if fixtures are missing - only 4 tests require generated files
+
 ## Contributing
 
 Contributions are welcome! Please:
@@ -662,4 +891,3 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 - Built with [Rustler](https://github.com/rusterlium/rustler)
 - Uses [pcap-file](https://github.com/courvoif/pcap-file) Rust crate
-- Inspired by [Explorer](https://github.com/elixir-explorer/explorer)

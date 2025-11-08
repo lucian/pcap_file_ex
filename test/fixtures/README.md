@@ -2,6 +2,15 @@
 
 This directory contains PCAP and PCAPNG files for testing, along with scripts to generate predictable test traffic.
 
+## Platform Compatibility
+
+The capture scripts work on both **macOS** and **Linux** with automatic platform detection:
+
+- **macOS**: Uses `lo0` (loopback), `en0` (ethernet/wifi)
+- **Linux**: Uses `lo` (loopback), `eth0`/`wlan0` (ethernet/wifi)
+
+The scripts auto-detect the appropriate loopback interface for your platform. You can override with `--interfaces <name>`.
+
 ## Quick Start - Generate Test Files
 
 ### Option 1: Automated Test Traffic Capture (Recommended)
@@ -161,26 +170,114 @@ tshark -r sample.pcapng --export-objects http,./http_objects/
 ## Troubleshooting
 
 ### dumpcap not found
-Install Wireshark which includes dumpcap:
+
+Install Wireshark to get dumpcap:
+
+**macOS:**
 ```bash
-# macOS
 brew install wireshark
-
-# Ubuntu/Debian
-sudo apt-get install wireshark
-
-# The dumpcap binary will be in your PATH
 ```
 
-### Permission denied
-dumpcap may need special permissions:
+**Linux (Ubuntu/Debian):**
 ```bash
-# macOS: Allow in System Preferences -> Security & Privacy
-# Linux: Add user to wireshark group or use sudo
-sudo usermod -aG wireshark $USER
+sudo apt-get install tshark  # Includes dumpcap
 ```
+
+**Linux (Fedora/RHEL):**
+```bash
+sudo dnf install wireshark-cli
+```
+
+**Linux (Arch):**
+```bash
+sudo pacman -S wireshark-cli
+```
+
+### Permission denied errors
+
+dumpcap requires elevated privileges for packet capture.
+
+**macOS:**
+
+Install Wireshark via Homebrew - it automatically sets up ChmodBPF:
+```bash
+brew install wireshark
+```
+
+This grants packet capture permissions without needing sudo.
+
+Alternatively, grant Terminal.app Input Monitoring permission:
+1. System Preferences → Security & Privacy → Privacy → Input Monitoring
+2. Add Terminal.app or iTerm.app
+
+**Linux:**
+
+**Option 1: wireshark group (Recommended)**
+```bash
+# Setup non-root capture
+sudo dpkg-reconfigure wireshark-common  # Select "Yes"
+sudo usermod -aG wireshark $USER
+newgrp wireshark  # Or logout/login
+
+# Verify it works
+dumpcap -D
+```
+
+**Option 2: Set capabilities**
+```bash
+sudo setcap cap_net_raw,cap_net_admin=eip $(which dumpcap)
+```
+
+**Option 3: Use sudo**
+```bash
+sudo ./capture_test_traffic.sh
+```
+
+### Interface not found errors
+
+**Symptoms:**
+```
+Error: Interface 'lo0' not found
+```
+
+**Solution:**
+
+The scripts auto-detect the correct loopback interface for your platform. If you see this error:
+
+1. List available interfaces:
+   ```bash
+   ./capture_test_traffic.sh --list-interfaces
+   # Or directly:
+   dumpcap -D
+   ```
+
+2. Specify the correct interface:
+   ```bash
+   # macOS examples
+   ./capture_test_traffic.sh --interfaces lo0      # Loopback
+   ./capture_test_traffic.sh --interfaces en0      # Ethernet/WiFi
+
+   # Linux examples
+   ./capture_test_traffic.sh --interfaces lo       # Loopback
+   ./capture_test_traffic.sh --interfaces eth0     # Ethernet
+   ./capture_test_traffic.sh --interfaces wlan0    # WiFi
+   ```
 
 ### No packets captured
-- Make sure you're capturing on the correct interface (lo0 for loopback)
-- Check the filter syntax with dumpcap -d
-- Verify traffic is actually being generated (use netstat or lsof)
+
+- Make sure you're capturing on the correct interface
+  - macOS: `lo0` for loopback, `en0` for network
+  - Linux: `lo` for loopback, `eth0`/`wlan0` for network
+- Check the filter syntax: `dumpcap -d`
+- Verify traffic is being generated: `lsof -i :8899` or `ss -ln | grep 8899`
+- Ensure HTTP/UDP servers started successfully (check script output)
+
+### Script hangs or times out
+
+- Check if ports 8899 (HTTP) or 8898 (UDP) are already in use
+- Kill any stale Python processes: `pkill -f http_server.py`
+- Ensure Python 3 is installed: `python3 --version`
+
+### For more help
+
+See the main README.md "Troubleshooting" section for detailed platform-specific setup and debugging guidance.

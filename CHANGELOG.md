@@ -91,3 +91,32 @@
 ### Fixed
 - `Stream.from_reader/1` now correctly handles PcapNg readers (previously caused FunctionClauseError)
 - **Security:** ETF (Erlang Term Format) decoding now uses `:safe` flag to prevent code execution from malicious PCAP files
+- **Cross-platform:** Test fixture generation scripts now work on both macOS and Linux
+  - Auto-detect loopback interface (`lo` on Linux, `lo0` on macOS)
+  - Permission checking for dumpcap with platform-specific guidance
+  - Port checking uses `ss` on Linux (faster), falls back to `lsof` on macOS
+  - Interface validation before capture starts
+  - Tests auto-generate missing fixtures on fresh clones
+
+### Added (Cross-Platform Support)
+- Mix task `mix test.fixtures` for manual fixture generation
+- Automatic fixture generation in test setup (test/test_helper.exs)
+- Comprehensive development setup documentation with platform-specific instructions:
+  - macOS: Homebrew installation and ChmodBPF setup
+  - Ubuntu/Debian: apt-get installation and wireshark group configuration
+  - Fedora/RHEL: dnf installation instructions
+  - Arch Linux: pacman installation instructions
+- Troubleshooting guide covering:
+  - Interface detection errors ("No such device")
+  - Permission denied errors with platform-specific solutions
+  - dumpcap setup verification
+  - Fixture generation debugging
+- Enhanced test/fixtures/README.md with platform compatibility matrix
+- Smart interface detection and validation in capture scripts
+- Platform detection (`uname -s`) for Darwin (macOS) vs Linux
+
+### Improved
+- Test fixture scripts work seamlessly on both macOS and Linux without modification
+- Better error messages for missing tools or permission issues
+- Graceful degradation when dumpcap is unavailable (tests skip with clear message)
+- Documentation covers both Git dependency and future Hex publishing scenarios

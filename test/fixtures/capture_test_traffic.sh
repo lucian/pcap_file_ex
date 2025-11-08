@@ -9,12 +9,14 @@ UDP_PORT=8898
 DEFAULT_OUTPUT="sample.pcapng"
 OUTPUT_FILE_PCAPNG=""
 PACKET_COUNT=50
-INTERFACES=("lo0")
+INTERFACES=()  # Will be set after platform detection
 REQUEST_NANO=0
 SERVER_PID=""
 UDP_SERVER_PID=""
 DUMPCAP_PCAPNG_PID=""
 DUMPCAP_PCAP_PID=""
+OS_TYPE=""
+DEFAULT_LOOPBACK=""
 
 usage() {
   cat <<'EOF'
@@ -22,22 +24,149 @@ Usage: ./capture_test_traffic.sh [output_file] [options]
 
 Options:
   -o, --output <file>        Write PCAPNG data to <file> (default: sample.pcapng)
-  -i, --interfaces <list>    Comma-separated interface list (default: lo0)
+  -i, --interfaces <list>    Comma-separated interface list (default: auto-detect loopback)
   -n, --nanosecond           Request nanosecond timestamp resolution (pcapng)
   -c, --count <num>          Stop after <num> packets per interface (default: 50)
       --list-interfaces      List available interfaces and exit
   -h, --help                 Show this help text and exit
 
 Examples:
-  ./capture_test_traffic.sh --interfaces lo0,en0 --nanosecond
+  ./capture_test_traffic.sh                            # Use default loopback
+  ./capture_test_traffic.sh --list-interfaces          # Show available interfaces
+  ./capture_test_traffic.sh --interfaces lo0,en0 -n    # macOS: multiple interfaces, nanosecond
+  ./capture_test_traffic.sh --interfaces lo,eth0 -n    # Linux: multiple interfaces, nanosecond
   ./capture_test_traffic.sh custom_capture.pcapng -c 200
 EOF
+}
+
+detect_platform() {
+  local platform
+  platform=$(uname -s)
+
+  case "$platform" in
+    Darwin)
+      OS_TYPE="macos"
+      DEFAULT_LOOPBACK="lo0"
+      ;;
+    Linux)
+      OS_TYPE="linux"
+      DEFAULT_LOOPBACK="lo"
+      ;;
+    *)
+      echo "Warning: Unsupported platform '$platform', assuming Linux defaults" >&2
+      OS_TYPE="unknown"
+      DEFAULT_LOOPBACK="lo"
+      ;;
+  esac
+}
+
+detect_loopback() {
+  local loopback=""
+
+  # Try to find loopback interface from dumpcap output
+  if command -v dumpcap >/dev/null 2>&1; then
+    # Parse dumpcap -D output for loopback
+    # Example: "1. lo (Loopback)" or "1. lo0"
+    loopback=$(dumpcap -D 2>/dev/null | grep -i loopback | head -n1 | sed -E 's/^[0-9]+\. ([^ ]+).*/\1/')
+  fi
+
+  # Fallback to platform default
+  if [[ -z "$loopback" ]]; then
+    loopback="$DEFAULT_LOOPBACK"
+  fi
+
+  echo "$loopback"
+}
+
+validate_interface() {
+  local iface=$1
+
+  if ! dumpcap -D 2>/dev/null | grep -qw "$iface"; then
+    echo "Error: Interface '$iface' not found" >&2
+    echo "" >&2
+    echo "Available interfaces:" >&2
+    dumpcap -D 2>/dev/null || echo "(dumpcap -D failed)" >&2
+    echo "" >&2
+    echo "Use --interfaces <name> to specify a different interface" >&2
+    echo "Use --list-interfaces to see all available interfaces" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+check_dumpcap_permissions() {
+  if ! dumpcap -D >/dev/null 2>&1; then
+    echo "Error: dumpcap requires elevated privileges" >&2
+    echo "" >&2
+
+    case "$OS_TYPE" in
+      macos)
+        cat >&2 <<'MACOS_HELP'
+macOS Setup:
+  1. Install Wireshark via Homebrew (includes ChmodBPF):
+     brew install wireshark
+
+  2. Or grant Terminal Input Monitoring permission:
+     System Preferences → Security & Privacy → Privacy → Input Monitoring
+     → Add Terminal.app
+
+  3. Verify it works:
+     dumpcap -D
+MACOS_HELP
+        ;;
+
+      linux|unknown)
+        cat >&2 <<'LINUX_HELP'
+Linux Setup (choose one):
+
+  Option 1: Wireshark group (recommended)
+    sudo dpkg-reconfigure wireshark-common  # Select 'Yes'
+    sudo usermod -aG wireshark $USER
+    newgrp wireshark  # Or logout/login
+
+  Option 2: Set capabilities
+    sudo setcap cap_net_raw,cap_net_admin=eip $(which dumpcap)
+
+  Option 3: Run with sudo
+    sudo ./capture_test_traffic.sh
+
+  Verify it works:
+    dumpcap -D
+LINUX_HELP
+        ;;
+    esac
+
+    return 1
+  fi
+
+  return 0
 }
 
 require_dumpcap() {
   if ! command -v dumpcap >/dev/null 2>&1; then
     echo "Error: dumpcap not found in PATH" >&2
-    echo "Install Wireshark or add dumpcap to your PATH." >&2
+    echo "" >&2
+    echo "Install Wireshark to get dumpcap:" >&2
+    echo "" >&2
+
+    case "$OS_TYPE" in
+      macos)
+        echo "  macOS:" >&2
+        echo "    brew install wireshark" >&2
+        ;;
+      linux|unknown)
+        echo "  Ubuntu/Debian:" >&2
+        echo "    sudo apt-get install tshark" >&2
+        echo "" >&2
+        echo "  Fedora/RHEL:" >&2
+        echo "    sudo dnf install wireshark-cli" >&2
+        echo "" >&2
+        echo "  Arch:" >&2
+        echo "    sudo pacman -S wireshark-cli" >&2
+        ;;
+    esac
+
     exit 1
   fi
 }
@@ -96,13 +225,33 @@ parse_args() {
   done
 }
 
+check_port_in_use() {
+  local port=$1
+
+  # Try ss first (modern Linux, faster)
+  if command -v ss >/dev/null 2>&1; then
+    if ss -ln 2>/dev/null | grep -q ":$port "; then
+      return 0  # Port in use
+    fi
+  # Fallback to lsof (macOS, older Linux)
+  elif command -v lsof >/dev/null 2>&1; then
+    if lsof -Pi :"$port" -t >/dev/null 2>&1; then
+      return 0  # Port in use
+    fi
+  else
+    echo "Warning: Neither 'ss' nor 'lsof' available, cannot check port $port" >&2
+  fi
+
+  return 1  # Port available or can't check
+}
+
 ensure_ports_available() {
-  if lsof -Pi :"$HTTP_PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
+  if check_port_in_use "$HTTP_PORT"; then
     echo "Error: HTTP port $HTTP_PORT is already in use" >&2
     exit 1
   fi
 
-  if lsof -Pi :"$UDP_PORT" -t >/dev/null 2>&1; then
+  if check_port_in_use "$UDP_PORT"; then
     echo "Error: UDP port $UDP_PORT is already in use" >&2
     exit 1
   fi
@@ -265,7 +414,17 @@ display_summary() {
 }
 
 main() {
+  # Platform detection must happen first
+  detect_platform
+
   parse_args "$@"
+
+  # Set default interface if not specified by user
+  if [[ ${#INTERFACES[@]} -eq 0 ]]; then
+    local detected_loopback
+    detected_loopback=$(detect_loopback)
+    INTERFACES=("$detected_loopback")
+  fi
 
   if [[ -z "$OUTPUT_FILE_PCAPNG" ]]; then
     if [[ $REQUEST_NANO -eq 1 && ${#INTERFACES[@]} -gt 1 ]]; then
@@ -282,6 +441,13 @@ main() {
   fi
 
   require_dumpcap
+  check_dumpcap_permissions || exit 1
+
+  # Validate all interfaces exist
+  for iface in "${INTERFACES[@]}"; do
+    validate_interface "$iface" || exit 1
+  done
+
   ensure_ports_available
   prepare_environment
 
