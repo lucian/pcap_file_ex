@@ -60,7 +60,25 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION=$(grep 'version:' mix.exs | sed -n 's/.*version: "\(.*\)".*/\1/p')
+          # Extract version using Mix (same method as lib/pcap_file_ex/native.ex)
+          VERSION=$(mix eval 'IO.puts(Mix.Project.config()[:version])' 2>/dev/null | tail -1)
+
+          # Validate version was extracted
+          if [ -z "$VERSION" ]; then
+            echo "Error: Failed to extract version from mix.exs"
+            exit 1
+          fi
+
+          echo "Extracted version: $VERSION"
+
+          # Validate tag matches version
+          TAG=${GITHUB_REF#refs/tags/}
+          EXPECTED_TAG="v${VERSION}"
+          if [ "$TAG" != "$EXPECTED_TAG" ]; then
+            echo "Warning: Git tag ($TAG) doesn't match expected format ($EXPECTED_TAG)"
+            echo "This may cause artifact download failures"
+          fi
+
           echo "PROJECT_VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
