@@ -187,4 +187,4 @@ jobs:
         run: cargo install --locked cargo-deny
 
       - name: Check for security advisories and license issues
-        run: cargo deny check --manifest-path=native/pcap_file_ex/Cargo.toml advisories licenses
+        run: cd native/pcap_file_ex && cargo deny check advisories licenses
