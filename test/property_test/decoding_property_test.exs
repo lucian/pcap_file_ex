@@ -99,13 +99,13 @@ defmodule PcapFileEx.DecodingPropertyTest do
     property "endpoint ports are in valid range when present" do
       check all packet <- packet_generator() do
         if packet.src && packet.src.port do
-          assert packet.src.port >= 0 and packet.src.port <= 65535,
-                 "src port should be in valid range 0..65535"
+          assert packet.src.port >= 0 and packet.src.port <= 65_535,
+                 "src port should be in valid range 0..65_535"
         end
 
         if packet.dst && packet.dst.port do
-          assert packet.dst.port >= 0 and packet.dst.port <= 65535,
-                 "dst port should be in valid range 0..65535"
+          assert packet.dst.port >= 0 and packet.dst.port <= 65_535,
+                 "dst port should be in valid range 0..65_535"
         end
       end
     end

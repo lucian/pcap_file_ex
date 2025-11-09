@@ -214,7 +214,7 @@ defmodule PcapFileEx.PropertyGenerators do
   """
   def size_range_generator do
     gen all min_size <- integer(0..5000),
-            max_size <- integer((min_size + 1)..10000) do
+            max_size <- integer((min_size + 1)..10_000) do
       min_size..max_size
     end
   end
@@ -223,7 +223,7 @@ defmodule PcapFileEx.PropertyGenerators do
   Generates positive integers for size thresholds.
   """
   def size_threshold_generator do
-    integer(1..10000)
+    integer(1..10_000)
   end
 
   @doc """
@@ -234,7 +234,7 @@ defmodule PcapFileEx.PropertyGenerators do
   """
   def time_range_generator do
     gen all start_secs <- integer(1_000_000_000..2_000_000_000),
-            duration_secs <- integer(1..86400) do
+            duration_secs <- integer(1..86_400) do
       start_dt = DateTime.from_unix!(start_secs, :second)
       end_dt = DateTime.add(start_dt, duration_secs, :second)
       {start_dt, end_dt}
@@ -275,10 +275,10 @@ defmodule PcapFileEx.PropertyGenerators do
   end
 
   @doc """
-  Generates valid port numbers (0..65535).
+  Generates valid port numbers (0..65_535).
   """
   def port_generator do
-    integer(0..65535)
+    integer(0..65_535)
   end
 
   # ============================================================================

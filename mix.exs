@@ -138,7 +138,8 @@ defmodule PcapFileEx.MixProject do
       {:igniter, "~> 0.7.0"},
       {:stream_data, "~> 1.2", only: [:dev, :test], runtime: false},
       {:tidewave, "~> 0.5.1", only: :dev},
-      {:bandit, "~> 1.0", only: :dev}
+      {:bandit, "~> 1.0", only: :dev},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 end

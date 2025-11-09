@@ -164,7 +164,7 @@ defmodule PcapFileEx.PcapNgTest do
           # Ethernet frames are typically 64-1518 bytes
           # But with jumbo frames, could be larger
           assert packet.orig_len > 0
-          assert packet.orig_len < 65536
+          assert packet.orig_len < 65_536
           assert byte_size(packet.data) > 0
         end)
       end

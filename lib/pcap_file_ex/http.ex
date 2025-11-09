@@ -130,16 +130,14 @@ defmodule PcapFileEx.HTTP do
   defp parse_start_line("HTTP/" <> rest) do
     case String.split(rest, " ", parts: 3) do
       [version, status, reason] ->
-        with {:ok, status_code} <- parse_status(status) do
-          {:response, version, status_code, String.trim(reason)}
-        else
+        case parse_status(status) do
+          {:ok, status_code} -> {:response, version, status_code, String.trim(reason)}
           _ -> {:error, :invalid_status}
         end
 
       [version, status] ->
-        with {:ok, status_code} <- parse_status(status) do
-          {:response, version, status_code, ""}
-        else
+        case parse_status(status) do
+          {:ok, status_code} -> {:response, version, status_code, ""}
           _ -> {:error, :invalid_status}
         end
 
@@ -242,7 +240,7 @@ defmodule PcapFileEx.HTTP do
 
     cond do
       # Check for ETF format first (magic byte 131), regardless of content-type
-      is_etf?(body) ->
+      etf?(body) ->
         decode_etf(body)
 
       String.contains?(content_type, "json") ->
@@ -260,8 +258,8 @@ defmodule PcapFileEx.HTTP do
     end
   end
 
-  defp is_etf?(<<131, _rest::binary>>), do: true
-  defp is_etf?(_), do: false
+  defp etf?(<<131, _rest::binary>>), do: true
+  defp etf?(_), do: false
 
   defp decode_etf(body) do
     # Use :safe flag to prevent code execution from malicious PCAP files

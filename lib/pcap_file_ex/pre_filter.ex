@@ -98,10 +98,10 @@ defmodule PcapFileEx.PreFilter do
           | {:ip_dest, String.t()}
           | {:ip_source_cidr, String.t()}
           | {:ip_dest_cidr, String.t()}
-          | {:port_source, 0..65535}
-          | {:port_dest, 0..65535}
-          | {:port_source_range, 0..65535, 0..65535}
-          | {:port_dest_range, 0..65535, 0..65535}
+          | {:port_source, 0..65_535}
+          | {:port_dest, 0..65_535}
+          | {:port_source_range, 0..65_535, 0..65_535}
+          | {:port_dest_range, 0..65_535, 0..65_535}
           | {:protocol, String.t()}
           | {:size_min, non_neg_integer()}
           | {:size_max, non_neg_integer()}
@@ -160,8 +160,8 @@ defmodule PcapFileEx.PreFilter do
 
       PreFilter.port_source(8080)
   """
-  @spec port_source(0..65535) :: filter()
-  def port_source(port) when is_integer(port) and port >= 0 and port <= 65535,
+  @spec port_source(0..65_535) :: filter()
+  def port_source(port) when is_integer(port) and port >= 0 and port <= 65_535,
     do: {:port_source, port}
 
   @doc """
@@ -172,8 +172,8 @@ defmodule PcapFileEx.PreFilter do
       PreFilter.port_dest(80)
       PreFilter.port_dest(443)
   """
-  @spec port_dest(0..65535) :: filter()
-  def port_dest(port) when is_integer(port) and port >= 0 and port <= 65535,
+  @spec port_dest(0..65_535) :: filter()
+  def port_dest(port) when is_integer(port) and port >= 0 and port <= 65_535,
     do: {:port_dest, port}
 
   @doc """
@@ -183,9 +183,9 @@ defmodule PcapFileEx.PreFilter do
 
       PreFilter.port_source_range(8000, 9000)
   """
-  @spec port_source_range(0..65535, 0..65535) :: filter()
+  @spec port_source_range(0..65_535, 0..65_535) :: filter()
   def port_source_range(min, max)
-      when is_integer(min) and is_integer(max) and min >= 0 and max <= 65535,
+      when is_integer(min) and is_integer(max) and min >= 0 and max <= 65_535,
       do: {:port_source_range, min, max}
 
   @doc """
@@ -195,9 +195,9 @@ defmodule PcapFileEx.PreFilter do
 
       PreFilter.port_dest_range(1024, 65535)
   """
-  @spec port_dest_range(0..65535, 0..65535) :: filter()
+  @spec port_dest_range(0..65_535, 0..65_535) :: filter()
   def port_dest_range(min, max)
-      when is_integer(min) and is_integer(max) and min >= 0 and max <= 65535,
+      when is_integer(min) and is_integer(max) and min >= 0 and max <= 65_535,
       do: {:port_dest_range, min, max}
 
   @doc """

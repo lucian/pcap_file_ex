@@ -36,7 +36,7 @@ defmodule PcapFileEx.PreFilterTest do
     end
 
     test "port_dest_range/2 creates correct filter" do
-      assert PreFilter.port_dest_range(1024, 65535) == {:port_dest_range, 1024, 65535}
+      assert PreFilter.port_dest_range(1024, 65_535) == {:port_dest_range, 1024, 65_535}
     end
 
     test "protocol/1 creates correct filter" do
@@ -168,7 +168,7 @@ defmodule PcapFileEx.PreFilterTest do
       Pcap.close(reader)
 
       # Should have no packets (or very few if any exist)
-      assert length(packets) == 0
+      assert Enum.empty?(packets)
     end
   end
 

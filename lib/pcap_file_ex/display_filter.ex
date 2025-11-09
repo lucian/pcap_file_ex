@@ -11,8 +11,8 @@ defmodule PcapFileEx.DisplayFilter do
   Supports standard fields like `ip.src`, `ip.dst`, `tcp.srcport`, `tcp.dstport`, `udp.srcport`, `udp.dstport`, and others.
   """
 
-  alias PcapFileEx.Packet
   alias __MODULE__.FieldRegistry
+  alias PcapFileEx.Packet
 
   @type compiled_filter :: (Packet.t() -> boolean())
 
@@ -279,30 +279,34 @@ defmodule PcapFileEx.DisplayFilter do
   end
 
   defp compare(:integer, actual, op, literal) do
-    with {:ok, expected} <- literal_to_integer(literal) do
-      case op do
-        :eq -> actual == expected
-        :neq -> actual != expected
-        :gt -> actual > expected
-        :lt -> actual < expected
-        :gte -> actual >= expected
-        :lte -> actual <= expected
-        _ -> false
-      end
-    else
-      _ -> false
+    case literal_to_integer(literal) do
+      {:ok, expected} ->
+        case op do
+          :eq -> actual == expected
+          :neq -> actual != expected
+          :gt -> actual > expected
+          :lt -> actual < expected
+          :gte -> actual >= expected
+          :lte -> actual <= expected
+          _ -> false
+        end
+
+      _ ->
+        false
     end
   end
 
   defp compare(:list_integer, actual, op, literal) when is_list(actual) do
-    with {:ok, expected} <- literal_to_integer(literal) do
-      case op do
-        :eq -> Enum.any?(actual, &(&1 == expected))
-        :neq -> Enum.any?(actual, &(&1 != expected))
-        _ -> false
-      end
-    else
-      _ -> false
+    case literal_to_integer(literal) do
+      {:ok, expected} ->
+        case op do
+          :eq -> Enum.any?(actual, &(&1 == expected))
+          :neq -> Enum.any?(actual, &(&1 != expected))
+          _ -> false
+        end
+
+      _ ->
+        false
     end
   end
 
@@ -421,11 +425,9 @@ defmodule PcapFileEx.DisplayFilter do
     end
 
     defp safe_extract(extractor, decoded) do
-      try do
-        extractor.(decoded)
-      rescue
-        _ -> nil
-      end
+      extractor.(decoded)
+    rescue
+      _ -> nil
     end
   end
 end

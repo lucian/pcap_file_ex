@@ -325,18 +325,20 @@ defmodule PcapFileEx.Packet do
   defp layer_protocol?(layer, protocol), do: layer == protocol
 
   defp extract_metadata(data, datalink) do
-    with {:ok, {layers, payload}} <- decode_layers(protocol_from_datalink(datalink), data) do
-      layers_list = layers
-      norm_payload = normalize_payload(payload)
-      protocols = build_protocol_stack(layers_list, norm_payload)
-      {src_ip, dst_ip, src_port, dst_port} = extract_endpoints(layers_list)
+    case decode_layers(protocol_from_datalink(datalink), data) do
+      {:ok, {layers, payload}} ->
+        layers_list = layers
+        norm_payload = normalize_payload(payload)
+        protocols = build_protocol_stack(layers_list, norm_payload)
+        {src_ip, dst_ip, src_port, dst_port} = extract_endpoints(layers_list)
 
-      src = build_endpoint(src_ip, src_port)
-      dst = build_endpoint(dst_ip, dst_port)
+        src = build_endpoint(src_ip, src_port)
+        dst = build_endpoint(dst_ip, dst_port)
 
-      {protocols, src, dst, layers_list, norm_payload}
-    else
-      _ -> {[], nil, nil, nil, nil}
+        {protocols, src, dst, layers_list, norm_payload}
+
+      _ ->
+        {[], nil, nil, nil, nil}
     end
   end
 
@@ -361,17 +363,15 @@ defmodule PcapFileEx.Packet do
   end
 
   defp decode_layers(proto, data) do
-    try do
-      case :pkt.decode(proto, data) do
-        {:ok, {layers, payload}} -> {:ok, {List.wrap(layers), payload}}
-        {:ok, layers} when is_list(layers) -> {:ok, {layers, ""}}
-        {:ok, layer} -> {:ok, {List.wrap(layer), ""}}
-        {:error, _} = error -> error
-        other -> {:error, {:unexpected_decode, other}}
-      end
-    rescue
-      _ -> {:error, :decode_failed}
+    case :pkt.decode(proto, data) do
+      {:ok, {layers, payload}} -> {:ok, {List.wrap(layers), payload}}
+      {:ok, layers} when is_list(layers) -> {:ok, {layers, ""}}
+      {:ok, layer} -> {:ok, {List.wrap(layer), ""}}
+      {:error, _} = error -> error
+      other -> {:error, {:unexpected_decode, other}}
     end
+  rescue
+    _ -> {:error, :decode_failed}
   end
 
   defp find_decoder(layers, payload) do
@@ -384,23 +384,19 @@ defmodule PcapFileEx.Packet do
   end
 
   defp safe_match?(%{matcher: matcher}, layers, payload) do
-    try do
-      matcher.(layers || [], normalize_payload(payload))
-    rescue
-      _ -> false
-    end
+    matcher.(layers || [], normalize_payload(payload))
+  rescue
+    _ -> false
   end
 
   defp safe_decode(%{decoder: decoder}, payload) do
-    try do
-      case decoder.(normalize_payload(payload)) do
-        {:ok, value} -> {:ok, value}
-        {:error, reason} -> {:error, reason}
-        value -> {:ok, value}
-      end
-    rescue
-      exception -> {:error, exception}
+    case decoder.(normalize_payload(payload)) do
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+      value -> {:ok, value}
     end
+  rescue
+    exception -> {:error, exception}
   end
 
   defp layer_atom(layer) when is_tuple(layer) and tuple_size(layer) > 0, do: elem(layer, 0)
@@ -478,12 +474,10 @@ defmodule PcapFileEx.Packet do
   defp ip_tuple?(value) when is_tuple(value) do
     size = tuple_size(value)
 
-    cond do
-      size == 4 or size == 8 ->
-        Enum.all?(Tuple.to_list(value), &is_integer/1)
-
-      true ->
-        false
+    if size == 4 or size == 8 do
+      Enum.all?(Tuple.to_list(value), &is_integer/1)
+    else
+      false
     end
   end
 

@@ -65,15 +65,13 @@ defmodule PcapFileEx.Stats do
   """
   @spec compute_streaming(Path.t() | Enumerable.t()) :: {:ok, stats()} | stats()
   def compute_streaming(path) when is_binary(path) do
-    try do
-      stats =
-        PcapFileEx.stream!(path)
-        |> compute_streaming()
+    stats =
+      PcapFileEx.stream!(path)
+      |> compute_streaming()
 
-      {:ok, stats}
-    rescue
-      e in RuntimeError -> {:error, e.message}
-    end
+    {:ok, stats}
+  rescue
+    e in RuntimeError -> {:error, e.message}
   end
 
   def compute_streaming(stream) do
@@ -145,15 +143,13 @@ defmodule PcapFileEx.Stats do
   """
   @spec packet_count(Path.t()) :: {:ok, non_neg_integer()} | {:error, String.t()}
   def packet_count(path) when is_binary(path) do
-    try do
-      count =
-        PcapFileEx.stream!(path)
-        |> Enum.count()
+    count =
+      PcapFileEx.stream!(path)
+      |> Enum.count()
 
-      {:ok, count}
-    rescue
-      e in RuntimeError -> {:error, e.message}
-    end
+    {:ok, count}
+  rescue
+    e in RuntimeError -> {:error, e.message}
   end
 
   @doc """
@@ -166,17 +162,15 @@ defmodule PcapFileEx.Stats do
   """
   @spec total_bytes(Path.t()) :: {:ok, non_neg_integer()} | {:error, String.t()}
   def total_bytes(path) when is_binary(path) do
-    try do
-      bytes =
-        PcapFileEx.stream!(path)
-        |> Enum.reduce(0, fn packet, acc ->
-          acc + byte_size(packet.data)
-        end)
+    bytes =
+      PcapFileEx.stream!(path)
+      |> Enum.reduce(0, fn packet, acc ->
+        acc + byte_size(packet.data)
+      end)
 
-      {:ok, bytes}
-    rescue
-      e in RuntimeError -> {:error, e.message}
-    end
+    {:ok, bytes}
+  rescue
+    e in RuntimeError -> {:error, e.message}
   end
 
   @doc """
