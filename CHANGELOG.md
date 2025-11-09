@@ -11,8 +11,8 @@
   - `PcapFileEx.Stream.from_reader/1` now returns `{:ok, stream}` for consistency
   - Added bang variants for convenience (old behavior):
     - `stream!/1`, `stream!/2` - raises on error
-    - `Stream.packets!/1` - raises on error
-    - `Stream.from_reader!/1` - raises on error
+    - `PcapFileEx.Stream.packets!/1` - raises on error
+    - `PcapFileEx.Stream.from_reader!/1` - raises on error
   - Comprehensive migration guide in module documentation
 - **Unified Format Detection** - New `PcapFileEx.Format` module
   - Single source of truth for PCAP/PCAPNG format detection

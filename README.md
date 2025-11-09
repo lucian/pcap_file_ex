@@ -795,6 +795,7 @@ See `PcapFileEx.Timestamp` module documentation for complete API details.
   payload: "GET /hello ...",                                 # Payload used during decoding
   decoded: %{http: %PcapFileEx.HTTP{...}}                    # Cached decoded payloads
 }
+```
 
 Loopback captures are normalized automatically: the 4-byte pseudo-header is removed and `datalink`
 is remapped to `"ipv4"`/`"ipv6"` so that protocol decoders operate directly on the payload.
@@ -834,6 +835,7 @@ PcapFileEx.DecoderRegistry.register(%{
   ]
 })
 
+# Read packets using the custom decoder
 {:ok, packets} = PcapFileEx.read_all("capture.pcapng")
 packet = Enum.find(packets, &(:my_proto in &1.protocols))
 {:ok, {:my_proto, decoded}} = PcapFileEx.Packet.decode_registered(packet)
@@ -940,8 +942,6 @@ end)
 ```
 
 Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly from TCP payloads.
-
-```
 
 ### Header
 
