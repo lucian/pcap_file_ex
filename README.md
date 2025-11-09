@@ -308,20 +308,64 @@ end)
 # Works with both formats - automatically detected
 # v0.2.0+: stream/1 returns {:ok, stream} | {:error, reason}
 {:ok, stream} = PcapFileEx.stream("large_capture.pcap")
+
+# v0.2.0+: Safe streams emit {:ok, packet} and {:error, metadata} tuples
+# Extract packets with pattern matching
 stream
+|> Stream.map(fn {:ok, packet} -> packet end)
 |> Stream.filter(fn packet -> byte_size(packet.data) > 1000 end)
 |> Stream.map(fn packet -> parse_packet(packet.data) end)
 |> Enum.take(100)
 
-# Or use stream!/1 for convenience (raises on error)
+# Or use stream!/1 for convenience (raises on errors)
 PcapFileEx.stream!("large_capture.pcapng")
 |> Enum.count()
 
 # Disable automatic decoder attachment for performance-sensitive pipelines
 {:ok, stream} = PcapFileEx.stream("large_capture.pcapng", decode: false)
 stream
-|> Stream.map(&byte_size(&1.data))
+|> Stream.map(fn {:ok, packet} -> byte_size(packet.data) end)
 |> Enum.sum()
+```
+
+### Error Handling in Streams (v0.2.0+)
+
+Safe stream variants emit tagged tuples, allowing graceful handling of corrupted files:
+
+```elixir
+{:ok, stream} = PcapFileEx.stream("possibly_corrupted.pcap")
+
+# Stop on first error
+result = Enum.reduce_while(stream, [], fn
+  {:ok, packet}, acc -> {:cont, [packet | acc]}
+  {:error, %{packet_index: i, reason: r}}, _acc ->
+    {:halt, {:error, "Failed at packet #{i}: #{r}"}}
+end)
+
+case result do
+  packets when is_list(packets) -> {:ok, Enum.reverse(packets)}
+  {:error, reason} -> IO.puts("Error: #{reason}")
+end
+
+# Skip errors and continue (collect partial results)
+valid_packets =
+  stream
+  |> Stream.filter(fn
+    {:ok, _} -> true
+    {:error, %{packet_index: i, reason: r}} ->
+      Logger.warning("Skipping packet #{i}: #{r}")
+      false
+  end)
+  |> Stream.map(fn {:ok, packet} -> packet end)
+  |> Enum.to_list()
+
+# Collect both packets and errors
+{packets, errors} = Enum.reduce(stream, {[], []}, fn
+  {:ok, packet}, {pkts, errs} -> {[packet | pkts], errs}
+  {:error, meta}, {pkts, errs} -> {pkts, [meta | errs]}
+end)
+
+IO.puts("Processed #{length(packets)} packets, #{length(errors)} errors")
 ```
 
 ### Manual control

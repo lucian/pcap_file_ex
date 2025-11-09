@@ -2,21 +2,74 @@ defmodule PcapFileEx.Stream do
   @moduledoc """
   Stream protocol implementation for lazy packet reading.
 
-  ## Migration from 0.1.x to 0.2.0
+  ## Safe vs Raising Variants
 
-  The stream API has changed to follow Elixir conventions:
+  This module provides two styles of stream APIs:
 
-  - `packets/1` now returns `{:ok, stream} | {:error, reason}` (safe)
-  - `packets!/1` raises on errors (old behavior)
-  - `from_reader/1` now returns `{:ok, stream} | {:error, reason}` for validation
-  - `from_reader!/1` raises on errors (old behavior)
+  ### Safe variants (do not raise mid-stream)
 
-  To migrate existing code, either:
-  1. Add `!` to your stream calls: `Stream.packets!(path)`
-  2. Handle the new return type: `{:ok, stream} = Stream.packets(path)`
+  - `packets/1` - Returns `{:ok, stream} | {:error, reason}`, emits tagged tuples
+  - `from_reader/1` - Returns stream that emits tagged tuples
+
+  These emit `{:ok, packet}` for successful reads and `{:error, metadata}` for
+  corrupted packets or read failures. The stream halts after emitting an error tuple.
+
+  ### Raising variants (raise on errors)
+
+  - `packets!/1` - Raises on file open or mid-stream errors
+  - `from_reader!/1` - Raises on mid-stream errors
+
+  These provide the simpler API but cannot gracefully handle corrupted files.
+
+  ## Error Handling
+
+  Safe streams emit error tuples with context:
+
+      {:error, %{reason: "parser error message", packet_index: 42}}
+
+  You can handle these in several ways:
+
+      # Stop on first error
+      {:ok, stream} = Stream.packets("capture.pcap")
+      Enum.reduce_while(stream, [], fn
+        {:ok, packet}, acc -> {:cont, [packet | acc]}
+        {:error, %{reason: r, packet_index: i}}, _acc ->
+          {:halt, {:error, "Packet \#{i} failed: \#{r}"}}
+      end)
+
+      # Skip errors and continue
+      stream
+      |> Stream.filter(fn
+        {:ok, _} -> true
+        {:error, meta} -> Logger.warning("Skipped: \#{inspect(meta)}"); false
+      end)
+      |> Stream.map(fn {:ok, packet} -> packet end)
+
+  ## Migration from 0.2.x to 0.3.0
+
+  In v0.2.x, `packets/1` validated at construction but raised mid-stream on errors.
+  In v0.3.0, it emits tagged tuples instead:
+
+  - Before: `{:ok, stream} = packets(path); packets = Enum.to_list(stream)`
+  - After: Handle tuples or use `packets!/1` for raising behavior
   """
 
-  alias PcapFileEx.{Pcap, PcapNg}
+  alias PcapFileEx.{Packet, Pcap, PcapNg}
+
+  @typedoc """
+  Error metadata emitted by safe streams when a packet read fails.
+
+  Contains the error reason and the 0-based index of the packet that failed to read.
+  """
+  @type error_metadata :: %{
+          reason: String.t(),
+          packet_index: non_neg_integer()
+        }
+
+  @typedoc """
+  Tagged tuple emitted by safe streams. Either a successful packet read or an error.
+  """
+  @type stream_item :: {:ok, Packet.t()} | {:error, error_metadata()}
 
   @doc """
   Creates a lazy stream of packets from a PCAP file.
@@ -27,26 +80,83 @@ defmodule PcapFileEx.Stream do
 
   The stream automatically handles opening and closing the file.
 
+  The returned stream emits tagged tuples:
+  - `{:ok, packet}` for successful packet reads
+  - `{:error, metadata}` for read failures (corrupted data, I/O errors, etc.)
+
+  The stream halts after emitting an error tuple. To continue reading past
+  errors or to get raising behavior, use `packets!/1` instead.
+
   ## Examples
 
+      # Basic usage with pattern matching
       {:ok, stream} = PcapFileEx.Stream.packets("capture.pcap")
-      stream
-      |> Stream.filter(fn packet -> byte_size(packet.data) > 1000 end)
-      |> Enum.take(10)
 
-      # Handle errors
+      packets = stream
+      |> Stream.map(fn
+        {:ok, packet} -> packet
+        {:error, meta} -> raise "Error at packet \#{meta.packet_index}: \#{meta.reason}"
+      end)
+      |> Enum.to_list()
+
+      # Stop on first error
+      result = Enum.reduce_while(stream, [], fn
+        {:ok, packet}, acc -> {:cont, [packet | acc]}
+        {:error, %{packet_index: i, reason: r}}, _acc ->
+          {:halt, {:error, "Failed at packet \#{i}: \#{r}"}}
+      end)
+
+      # Skip errors and continue
+      valid_packets = stream
+      |> Stream.filter(fn
+        {:ok, _} -> true
+        {:error, _} -> false
+      end)
+      |> Stream.map(fn {:ok, packet} -> packet end)
+      |> Enum.to_list()
+
+      # Handle file open errors
       case PcapFileEx.Stream.packets("nonexistent.pcap") do
-        {:ok, stream} -> Enum.to_list(stream)
-        {:error, msg} -> IO.puts("Error: \#{msg}")
+        {:ok, stream} -> process_stream(stream)
+        {:error, msg} -> IO.puts("Cannot open file: \#{msg}")
       end
   """
-  @spec packets(Path.t()) :: {:ok, Enumerable.t()} | {:error, String.t()}
+  @spec packets(Path.t()) :: {:ok, Enumerable.t(stream_item())} | {:error, String.t()}
   def packets(path) do
     # Pre-validate by attempting to open
     case Pcap.open(path) do
       {:ok, reader} ->
         Pcap.close(reader)
-        {:ok, packets!(path)}
+
+        stream =
+          Stream.resource(
+            # Start function: open the file with packet counter
+            fn ->
+              case Pcap.open(path) do
+                {:ok, reader} -> {reader, 0}
+                {:error, reason} -> raise "Failed to open PCAP file: #{reason}"
+              end
+            end,
+            # Next function: read packets and emit tagged tuples
+            fn
+              :halt ->
+                {:halt, :halt}
+
+              {reader, index} ->
+                case Pcap.next_packet(reader) do
+                  {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
+                  :eof -> {:halt, {reader, index}}
+                  {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}
+                end
+            end,
+            # End function: close the file
+            fn
+              :halt -> :ok
+              {reader, _index} -> Pcap.close(reader)
+            end
+          )
+
+        {:ok, stream}
 
       {:error, reason} ->
         {:error, reason}
@@ -93,24 +203,75 @@ defmodule PcapFileEx.Stream do
   This does NOT automatically close the reader when done.
   Works with both PCAP and PCAPNG readers.
 
-  Returns `{:ok, stream}`. Unlike `packets/1`, this cannot fail since
-  the reader is already validated and opened.
+  The returned stream emits tagged tuples:
+  - `{:ok, packet}` for successful packet reads
+  - `{:error, metadata}` for read failures (corrupted data, I/O errors, etc.)
+
+  The stream halts after emitting an error tuple. For raising behavior,
+  use `from_reader!/1` instead.
 
   ## Examples
 
       {:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
-      {:ok, stream} = PcapFileEx.Stream.from_reader(reader)
-      stream |> Enum.take(10)
+      stream = PcapFileEx.Stream.from_reader(reader)
+
+      valid_packets = stream
+      |> Stream.filter(fn
+        {:ok, _} -> true
+        {:error, _} -> false
+      end)
+      |> Stream.map(fn {:ok, packet} -> packet end)
+      |> Enum.take(10)
+
       PcapFileEx.Pcap.close(reader)
 
+      # PCAPNG example
       {:ok, reader} = PcapFileEx.PcapNg.open("capture.pcapng")
-      {:ok, stream} = PcapFileEx.Stream.from_reader(reader)
-      stream |> Enum.take(10)
+      stream = PcapFileEx.Stream.from_reader(reader)
+      # ... process stream ...
       PcapFileEx.PcapNg.close(reader)
   """
-  @spec from_reader(Pcap.t() | PcapNg.t()) :: {:ok, Enumerable.t()}
-  def from_reader(reader) do
-    {:ok, from_reader!(reader)}
+  @spec from_reader(Pcap.t() | PcapNg.t()) :: Enumerable.t(stream_item())
+  def from_reader(%Pcap{} = reader) do
+    Stream.resource(
+      fn -> {reader, 0} end,
+      fn
+        :halt ->
+          {:halt, :halt}
+
+        {reader, index} ->
+          case Pcap.next_packet(reader) do
+            {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
+            :eof -> {:halt, {reader, index}}
+            {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}
+          end
+      end,
+      fn
+        :halt -> :ok
+        {_reader, _index} -> :ok
+      end
+    )
+  end
+
+  def from_reader(%PcapNg{} = reader) do
+    Stream.resource(
+      fn -> {reader, 0} end,
+      fn
+        :halt ->
+          {:halt, :halt}
+
+        {reader, index} ->
+          case PcapNg.next_packet(reader) do
+            {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
+            :eof -> {:halt, {reader, index}}
+            {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}
+          end
+      end,
+      fn
+        :halt -> :ok
+        {_reader, _index} -> :ok
+      end
+    )
   end
 
   @doc """

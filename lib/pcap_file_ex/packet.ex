@@ -246,8 +246,18 @@ defmodule PcapFileEx.Packet do
 
   @doc """
   Attaches the decoded payload (when available) to the packet's `decoded` map.
+
+  Supports both bare packets and tagged tuples from safe streams.
   """
-  @spec attach_decoded(t()) :: t()
+  @spec attach_decoded(t() | {:ok, t()} | {:error, map()}) :: t() | {:ok, t()} | {:error, map()}
+  def attach_decoded({:ok, %__MODULE__{} = packet}) do
+    {:ok, attach_decoded(packet)}
+  end
+
+  def attach_decoded({:error, _} = error) do
+    error
+  end
+
   def attach_decoded(%__MODULE__{} = packet) do
     case decode_registered(packet) do
       {:ok, {protocol, value}} ->

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0] - 2025-11-09
+## [0.2.0] - TBD
 
 ⚠️ **BREAKING CHANGES** - Stream API now follows Elixir conventions
 

@@ -104,8 +104,10 @@ jobs:
         run: |
           MIX_VERSION=$(grep '@version' mix.exs | sed 's/.*"\(.*\)".*/\1/')
           CARGO_VERSION=$(grep '^version' native/pcap_file_ex/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          echo "mix=$MIX_VERSION" >> $GITHUB_OUTPUT
-          echo "cargo=$CARGO_VERSION" >> $GITHUB_OUTPUT
+          {
+            echo "mix=${MIX_VERSION}"
+            echo "cargo=${CARGO_VERSION}"
+          } >> $GITHUB_OUTPUT
 
       - name: Check versions match
         run: |

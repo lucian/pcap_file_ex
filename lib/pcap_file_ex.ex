@@ -142,7 +142,10 @@ defmodule PcapFileEx do
          {:ok, base_stream} <- get_base_stream(format, path) do
       stream =
         if decode? do
-          Elixir.Stream.map(base_stream, &Packet.attach_decoded/1)
+          Elixir.Stream.map(base_stream, fn
+            {:ok, packet} -> {:ok, Packet.attach_decoded(packet)}
+            {:error, _} = error -> error
+          end)
         else
           base_stream
         end
@@ -158,6 +161,9 @@ defmodule PcapFileEx do
 
   This is the old behavior from version 0.1.x.
 
+  The returned stream emits bare packets (not tagged tuples) and raises
+  on mid-stream errors.
+
   ## Examples
 
       PcapFileEx.stream!("capture.pcap")
@@ -167,8 +173,18 @@ defmodule PcapFileEx do
   @spec stream!(Path.t(), keyword()) :: Enumerable.t()
   def stream!(path, opts \\ []) when is_binary(path) do
     case stream(path, opts) do
-      {:ok, stream} -> stream
-      {:error, reason} -> raise "Failed to create stream: #{reason}"
+      {:ok, stream} ->
+        # Unwrap tagged tuples and raise on errors
+        Elixir.Stream.map(stream, fn
+          {:ok, packet} ->
+            packet
+
+          {:error, %{reason: reason, packet_index: index}} ->
+            raise "Failed to read packet #{index}: #{reason}"
+        end)
+
+      {:error, reason} ->
+        raise "Failed to create stream: #{reason}"
     end
   end
 
@@ -192,18 +208,25 @@ defmodule PcapFileEx do
           Elixir.Stream.resource(
             fn ->
               case PcapNg.open(path) do
-                {:ok, reader} -> reader
+                {:ok, reader} -> {reader, 0}
                 {:error, reason} -> raise "Failed to open PCAPNG file: #{reason}"
               end
             end,
-            fn reader ->
-              case PcapNg.next_packet(reader) do
-                {:ok, packet} -> {[packet], reader}
-                :eof -> {:halt, reader}
-                {:error, reason} -> raise "Error reading packet: #{reason}"
-              end
+            fn
+              :halt ->
+                {:halt, :halt}
+
+              {reader, index} ->
+                case PcapNg.next_packet(reader) do
+                  {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
+                  :eof -> {:halt, {reader, index}}
+                  {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}
+                end
             end,
-            fn reader -> PcapNg.close(reader) end
+            fn
+              :halt -> :ok
+              {reader, _index} -> PcapNg.close(reader)
+            end
           )
 
         {:ok, stream}
