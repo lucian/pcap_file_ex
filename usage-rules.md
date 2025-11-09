@@ -459,8 +459,18 @@ Each packet has **two timestamp fields**:
 
 ```elixir
 # Merge packets from multiple captures in chronological order
+# Using PcapFileEx.Merge (v0.3.0+) - memory-efficient streaming merge
 files = ["capture1.pcapng", "capture2.pcapng", "capture3.pcapng"]
 
+# Memory-efficient streaming merge (O(N files) memory)
+{:ok, stream} = PcapFileEx.Merge.stream(files)
+packets = Enum.to_list(stream)
+
+# With source tracking to identify packet origins
+{:ok, stream} = PcapFileEx.Merge.stream(files, annotate_source: true)
+packets = Enum.take(stream, 100)  # Each item is {packet, metadata}
+
+# Legacy approach (loads all files into memory - not recommended for large files)
 all_packets =
   files
   |> Enum.flat_map(fn file ->
@@ -469,7 +479,7 @@ all_packets =
   end)
   |> Enum.sort_by(& &1.timestamp_precise, PcapFileEx.Timestamp)
 
-# Now packets are in perfect chronological order with nanosecond precision
+# See usage-rules/merging.md for complete merge patterns and best practices
 ```
 
 #### ✅ Calculating Precise Time Differences
@@ -564,4 +574,5 @@ DateTime.compare(packet.timestamp, some_datetime)  # => :lt
 - [Filtering Guide](usage-rules/filtering.md) - Complete filtering reference
 - [HTTP Guide](usage-rules/http.md) - HTTP decoding patterns
 - [Format Guide](usage-rules/formats.md) - PCAP vs PCAPNG differences
+- [Merging Guide](usage-rules/merging.md) - Multi-file chronological merge patterns
 - [Examples](usage-rules/examples.md) - Complete working examples

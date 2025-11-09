@@ -19,6 +19,7 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **HTTP Body Decoding** - Automatic decoding of JSON, ETF, form data, and text bodies
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
+- ✅ **Multi-File Merge** - Merge multiple captures by nanosecond-precision timestamps with clock validation
 - ✅ **Validation** - File format validation and accessibility checks
 - ✅ **Property-Based Testing** - 94 property tests with StreamData for comprehensive edge case coverage
 
@@ -753,6 +754,230 @@ true = PcapFileEx.Validator.pcap?("capture.pcap")
 {:ok, size} = PcapFileEx.Validator.file_size("capture.pcap")
 ```
 
+### Multi-file timeline merge
+
+Merge multiple PCAP/PCAPNG files captured on different machines into a single chronological stream. Ideal for correlating traffic from multiple network taps or distributed systems.
+
+```elixir
+# Basic merge - chronologically sorted by nanosecond-precision timestamps
+{:ok, stream} = PcapFileEx.Merge.stream(["server1.pcap", "server2.pcap"])
+packets = Enum.to_list(stream)
+
+# Track which file each packet came from
+{:ok, stream} = PcapFileEx.Merge.stream(
+  ["tap1.pcap", "tap2.pcap"],
+  annotate_source: true
+)
+
+Enum.each(stream, fn {packet, metadata} ->
+  IO.puts("Packet from #{metadata.source_file} at #{metadata.packet_index}")
+end)
+
+# Validate clock synchronization before merging
+case PcapFileEx.Merge.validate_clocks(["server1.pcap", "server2.pcap"]) do
+  {:ok, stats} ->
+    IO.puts("Max clock drift: #{stats.max_drift_ms}ms")
+    {:ok, stream} = PcapFileEx.Merge.stream(["server1.pcap", "server2.pcap"])
+  {:error, :excessive_drift, meta} ->
+    IO.puts("Clock drift too large: #{meta.max_drift_ms}ms - check NTP sync")
+end
+
+# Count total packets across multiple files
+count = PcapFileEx.Merge.count(["server1.pcap", "server2.pcap"])
+```
+
+**Important:** For accurate multi-file merging, **synchronize clocks** on all capture systems using NTP (Network Time Protocol) or chronyd. See [Clock Synchronization for Multi-File Merge](#clock-synchronization-for-multi-file-merge) below for setup instructions.
+
+**Features:**
+- ✅ **Nanosecond precision** - Preserves full timestamp accuracy
+- ✅ **Memory efficient** - O(N files) memory using streaming priority queue
+- ✅ **Mixed formats** - Merges PCAP and PCAPNG files together
+- ✅ **Datalink validation** - Ensures compatible link-layer protocols
+- ✅ **PCAPNG interface remapping** - Handles multi-interface captures automatically
+- ✅ **Source annotation** - Optional tracking of source file for each packet
+- ✅ **Clock validation** - Detects excessive clock drift
+
+## Clock Synchronization for Multi-File Merge
+
+When merging PCAP files from multiple machines, **accurate clock synchronization is critical**. Without synchronized clocks, packets may be merged in the wrong order, breaking protocol flows and making analysis unreliable.
+
+### Why Clock Synchronization Matters
+
+- **Chronological accuracy**: Packets must be ordered by actual capture time, not local clock time
+- **Protocol reconstruction**: TCP reassembly requires correct packet ordering
+- **Distributed tracing**: Correlating events across systems needs synchronized timestamps
+- **Forensic analysis**: Timeline accuracy is essential for incident investigation
+
+### Recommended: chronyd (NTP Client)
+
+[chronyd](https://chrony-project.org/) is a modern, high-performance NTP implementation that provides better clock synchronization than the older ntpd. It's especially effective on systems with:
+- Intermittent network connectivity
+- Virtual machines
+- Systems that suspend/resume frequently
+
+### Installation
+
+#### Linux (Ubuntu/Debian)
+```bash
+# Install chronyd
+sudo apt-get update
+sudo apt-get install chrony
+
+# Start and enable service
+sudo systemctl start chronyd
+sudo systemctl enable chronyd
+```
+
+#### Linux (Fedora/RHEL/CentOS)
+```bash
+# Install chronyd (usually pre-installed)
+sudo dnf install chrony
+
+# Start and enable service
+sudo systemctl start chronyd
+sudo systemctl enable chronyd
+```
+
+#### macOS
+```bash
+# macOS uses built-in ptp (Precision Time Protocol)
+# No additional installation needed - managed by System Preferences
+
+# Verify NTP is enabled
+sudo systemsetup -getusingnetworktime
+
+# Enable if needed
+sudo systemsetup -setusingnetworktime on
+```
+
+### Configuration
+
+#### Basic chronyd configuration (`/etc/chrony/chrony.conf`):
+
+```conf
+# Use public NTP pool servers (default)
+pool 2.pool.ntp.org iburst
+
+# Or use specific time servers (recommended for production)
+server time.cloudflare.com iburst
+server time.google.com iburst
+server time.apple.com iburst
+
+# Record system clock drift
+driftfile /var/lib/chrony/drift
+
+# Allow system clock to be stepped in first three updates
+# if offset > 1 second (good for VMs or systems with inaccurate clocks)
+makestep 1.0 3
+
+# Enable kernel synchronization of real-time clock (RTC)
+rtcsync
+```
+
+After editing configuration:
+```bash
+sudo systemctl restart chronyd
+```
+
+### Verification
+
+#### Check chronyd status:
+```bash
+# View synchronization status
+chronyc tracking
+
+# Expected output:
+# Reference ID    : A29FC87B (time.cloudflare.com)
+# Stratum         : 3
+# Ref time (UTC)  : Sat Nov 09 17:30:00 2025
+# System time     : 0.000012389 seconds fast of NTP time
+# Last offset     : +0.000005123 seconds
+# RMS offset      : 0.000008234 seconds
+# ...
+
+# View NTP sources
+chronyc sources
+
+# Expected output shows multiple time sources with * indicating current sync:
+# MS Name/IP address         Stratum Poll Reach LastRx Last sample
+# ===============================================================================
+# ^* time.cloudflare.com           1   6   377    23   +123us[ +156us] +/-   15ms
+# ^- time.google.com               1   6   377    24   +234us[ +267us] +/-   20ms
+# ^+ time.apple.com                1   6   377    25   +345us[ +378us] +/-   18ms
+```
+
+Good synchronization indicators:
+- **System time offset < 1ms** (ideally < 100µs)
+- **Stratum ≤ 3** (distance from reference clock)
+- **Last offset small** (< 1ms recent drift)
+- **Multiple sources reachable** (* or + markers)
+
+#### Check for excessive drift:
+```bash
+# On each capture system
+chronyc tracking | grep "System time"
+
+# If offset > 10ms between systems, wait for convergence or investigate:
+# - Network issues
+# - Firewall blocking NTP (UDP port 123)
+# - Local time zone misconfiguration
+# - Hardware clock issues
+```
+
+### Validation in PcapFileEx
+
+Before merging files, validate clock synchronization:
+
+```elixir
+case PcapFileEx.Merge.validate_clocks(["server1.pcap", "server2.pcap", "server3.pcap"]) do
+  {:ok, stats} ->
+    IO.puts("✓ Clock validation passed")
+    IO.puts("  Max drift: #{Float.round(stats.max_drift_ms, 2)}ms")
+
+    # Show per-file timing stats
+    Enum.each(stats.files, fn file ->
+      IO.puts("  #{file.path}:")
+      IO.puts("    First packet: #{file.first_timestamp}")
+      IO.puts("    Duration: #{Float.round(file.duration_ms, 2)}ms")
+    end)
+
+    # Proceed with merge
+    {:ok, stream} = PcapFileEx.Merge.stream([
+      "server1.pcap",
+      "server2.pcap",
+      "server3.pcap"
+    ])
+
+  {:error, :excessive_drift, meta} ->
+    IO.puts("✗ Clock validation failed")
+    IO.puts("  Max drift: #{Float.round(meta.max_drift_ms, 2)}ms (threshold: 1000ms)")
+    IO.puts("\nRecommendations:")
+    IO.puts("  1. Verify chronyd is running on all capture systems")
+    IO.puts("  2. Check chronyc tracking on each system")
+    IO.puts("  3. Ensure NTP traffic (UDP 123) is not blocked")
+    IO.puts("  4. Wait for clock convergence (may take 5-10 minutes)")
+end
+```
+
+### Best Practices
+
+1. **Start chronyd before captures**: Let clocks synchronize for 5-10 minutes before starting packet capture
+2. **Use consistent NTP servers**: Configure all systems to use the same NTP pool or servers
+3. **Monitor during capture**: Check `chronyc tracking` periodically during long captures
+4. **Validate before merge**: Always use `PcapFileEx.Merge.validate_clocks/1` before merging
+5. **Document time source**: Record NTP configuration in capture metadata
+6. **Use nanosecond precision**: Prefer PCAP-ng format with nanosecond timestamps when possible
+
+### Acceptable Clock Drift
+
+- **< 1ms**: Excellent - suitable for high-precision protocol analysis
+- **1-10ms**: Good - acceptable for most distributed system analysis
+- **10-100ms**: Fair - may affect fine-grained timing analysis
+- **100-1000ms**: Poor - noticeable ordering issues possible
+- **> 1000ms**: Unacceptable - `PcapFileEx.Merge.validate_clocks/1` will fail
+
+If drift exceeds 1000ms, the merge operation will fail by default to prevent incorrect chronological ordering.
+
 ## Timestamp Precision Support
 
 PcapFileEx automatically detects and supports both **microsecond** and **nanosecond** timestamp precision in PCAP files:
@@ -1163,16 +1388,16 @@ PcapFileEx.stream!("huge_10gb.pcap")
 - [x] Statistics and analysis
 - [x] Packet filtering DSL
 - [x] File validation
-- [x] Comprehensive tests (303 tests: 193 example-based, 94 property-based, 16 doctests)
+- [x] Comprehensive tests (352 tests: 227 example-based, 109 property-based, 16 doctests)
 - [x] Property-based testing with StreamData for edge case coverage
 - [x] High-performance pre-filtering in Rust layer
 - [x] HTTP/DNS protocol decoding
 - [x] Nanosecond timestamp precision support
+- [x] **Multi-file timeline merge** - Chronologically merge multiple PCAP/PCAPNG files with nanosecond precision, interface remapping, source annotation, and clock validation
 
 ### Planned Features
 
 - [ ] **PCAP writer/trimming API** - Export filtered packets back to PCAP/PCAPNG format for sharing or regression testing
-- [ ] **Multi-file timeline merge** - Merge multiple captures by timestamp_precise, useful for correlating outputs from multiple network taps
 - [ ] **Display filter → PreFilter compiler** - Convert Wireshark-style display filters into PreFilter tuples for familiar syntax
 - [ ] **Telemetry hooks** - Emit `:telemetry` events for packet decode, HTTP parsing, and PreFilter hits for observability
 - [ ] **Higher-level protocol decoders** - TLS, DNS (enhanced), HTTP/2 decoders as optional dependencies

@@ -1,5 +1,113 @@
 # Changelog
 
+## [0.3.0] - 2025-11-09
+
+**MAJOR FEATURE** - Multi-File PCAP Timeline Merge
+
+### Added
+- **Multi-File Merge API** - Chronologically merge multiple PCAP/PCAPNG files
+  - New `PcapFileEx.Merge` module with comprehensive merge capabilities
+  - `Merge.stream/2` - Creates lazy chronologically-sorted packet stream from multiple files
+  - `Merge.stream!/2` - Bang variant that raises on errors
+  - `Merge.count/1` - Fast total packet count across multiple files
+  - `Merge.validate_clocks/1` - Clock synchronization validation with drift detection
+  - Supports mixed PCAP and PCAPNG files in single merge operation
+  - Memory-efficient: O(N files) memory usage via min-heap algorithm
+  - Performance: O(M log N) time complexity (M packets, N files)
+  - Comprehensive test coverage: 352 tests (including 8 new property tests)
+
+- **Nanosecond-Precision Chronological Ordering**
+  - Uses `Timestamp.compare/2` for accurate chronological merging
+  - Preserves microsecond and nanosecond precision from source files
+  - Deterministic ordering for packets with identical timestamps
+  - Stable sort using file index and packet index as tiebreakers
+
+- **PCAPNG Interface ID Remapping** (Critical for Multi-File PCAPNG Merges)
+  - Automatic global interface ID assignment prevents collisions
+  - Maintains invariant: `packet.interface_id == packet.interface.id`
+  - New `PcapFileEx.Merge.InterfaceMapper` module handles remapping logic
+  - Clones `Interface` struct to update nested `id` field correctly
+  - Per-file interface scanning and global ID allocation
+
+- **Source Annotation** (`:annotate_source` option)
+  - Track packet origins with rich metadata
+  - Metadata includes: `:source_file`, `:file_index`, `:packet_index`
+  - PCAPNG-specific metadata: `:original_interface_id`, `:remapped_interface_id`
+  - Enables packet provenance tracking and debugging
+  - Stream format: `{packet, metadata}` tuples when enabled
+
+- **Flexible Error Handling** (`:on_error` option)
+  - `:halt` - Stop streaming on first error (default, safe behavior)
+  - `:skip` - Skip corrupt packets, emit `{:skipped_packet, meta}` markers
+  - `:collect` - Wrap all items in result tuples: `{:ok, packet}` or `{:error, meta}`
+  - Works seamlessly with annotation (nested tuples: `{:ok, {packet, meta}}`)
+  - Error metadata includes: `:reason`, `:source_file`, `:packet_index`
+
+- **Clock Validation and Drift Detection**
+  - `validate_clocks/1` checks timestamp alignment across files
+  - Returns `:ok` with stats or `{:error, :excessive_drift, stats}`
+  - Drift threshold: 10 seconds (configurable)
+  - Per-file statistics: min/max timestamps, packet counts
+  - Helps identify unsynchronized capture clocks
+
+- **Priority Queue Implementation**
+  - New `PcapFileEx.Merge.Heap` module for min-heap operations
+  - Optimized for streaming merge with O(log N) push/pop
+  - Efficient chronological packet ordering
+  - Custom comparison using `Timestamp.compare/2`
+
+- **Comprehensive Property-Based Tests**
+  - 8 new property tests in `test/property_test/merge_property_test.exs`
+  - Properties tested:
+    - Chronological ordering invariant
+    - Total packet count preservation
+    - Source annotation completeness
+    - Deterministic ordering for identical timestamps
+    - Error mode behavior (`:collect`, `:skip`, `:halt`)
+    - PCAPNG interface ID invariant
+    - Interface ID annotation completeness
+  - Environment-aware: 100 iterations locally, 1000 in CI
+
+### Changed
+- **Code Review Remediation** - Two rounds of thorough review and fixes
+  - Round 1 (5 findings): Fixed 2 CRITICAL, 2 HIGH, 1 MEDIUM priority issues
+    - Fixed premature resource cleanup (CRITICAL)
+    - Added explicit file validation (CRITICAL)
+    - Fixed NIF error propagation (HIGH)
+    - Added comprehensive error metadata (HIGH)
+    - Enhanced property test coverage (MEDIUM)
+  - Round 2 (2 findings): Fixed remaining invariant and metadata issues
+    - Fixed PCAPNG interface invariant breach (CRITICAL)
+    - Added `remapped_interface_id` to metadata (HIGH)
+    - Added regression tests for both issues
+
+- **Test Suite Enhancements**
+  - Removed unused `@sample2_pcapng` module attribute
+  - Added "PCAPNG interface remapping maintains invariant" property test
+  - Added "PCAPNG annotation includes both interface IDs" property test
+  - Updated existing annotation test to assert both interface ID fields
+
+### Fixed
+- **Interface ID Remapping** (CRITICAL, Code Review Round 2)
+  - `InterfaceMapper.remap_packet/3` now updates both fields:
+    - Updates `packet.interface_id` (top-level field)
+    - Clones and updates `packet.interface.id` (nested struct field)
+  - Maintains invariant: `packet.interface_id == packet.interface.id`
+  - Prevents packets from carrying original interface IDs in merged streams
+
+- **Metadata Completeness** (HIGH, Code Review Round 2)
+  - Annotation now includes both `:original_interface_id` and `:remapped_interface_id`
+  - API contract fully met for PCAPNG multi-file merges
+  - Users can track both original source interface and global merged interface
+
+### Documentation
+- Complete feature specification: `specs/20251109-multi-file-pcap-timeline-merge.md` (v1.4)
+  - 85+ pages covering design, implementation, and code review
+  - Includes two rounds of code review findings and fixes
+  - Comprehensive examples and edge case documentation
+- See README.md for usage examples and integration guide
+- See `usage-rules/merging.md` for detailed merge patterns and best practices
+
 ## [0.2.1] - 2025-11-09
 
 - improve CI pipeline - add dialyzer, credo, package audit
