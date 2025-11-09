@@ -1,15 +1,34 @@
 [package]
 name = "pcap_file_ex"
 version = "0.3.0"
+authors = ["Lucian Parvu"]
 edition = "2021"
+license = "MIT"
+description = "Rust NIF for high-performance PCAP/PCAPNG parsing in Elixir"
+repository = "https://github.com/lucian/pcap_file_ex"
+keywords = ["pcap", "pcapng", "nif", "elixir", "rustler"]
+categories = ["network-programming", "parser-implementations"]
+publish = false  # This is a NIF crate, not meant for standalone use on crates.io
 
 [lib]
 name = "pcap_file_ex"
-crate-type = ["cdylib"]
+crate-type = ["cdylib"]  # Dynamic library for Elixir NIF
 
 [dependencies]
-rustler = "0.37.0"
+rustler = "0.37"  # Allow patch updates for security fixes
 pcap-file = { git = "https://github.com/lucian/pcap-file", rev = "e60e2f9b614812360fdf6909b90a8b05283adb05" }
 thiserror = "1.0"
 etherparse = "0.19"
 ipnetwork = "0.21"
+
+# Optimized release profile for production NIF performance
+[profile.release]
+lto = true              # Link-time optimization: 10-20% faster runtime, smaller binary
+panic = "unwind"        # CRITICAL: Rust panics must unwind (not abort) to avoid crashing BEAM
+codegen-units = 1       # Better optimization (slower compile time, faster runtime)
+opt-level = 3           # Maximum optimization (default, explicit for clarity)
+strip = true            # Strip debug symbols for smaller binary size
+
+# Development profile with consistent panic behavior
+[profile.dev]
+panic = "unwind"        # Consistent with release for testing NIF safety
