@@ -102,7 +102,7 @@ jobs:
       - name: Extract versions
         id: versions
         run: |
-          MIX_VERSION=$(grep '@version' mix.exs | sed 's/.*"\(.*\)".*/\1/')
+          MIX_VERSION=$(grep -E '^\s*@version\s+"' mix.exs | sed 's/.*"\(.*\)".*/\1/')
           CARGO_VERSION=$(grep '^version' native/pcap_file_ex/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           # Strip -dev suffix from mix version for comparison
           MIX_VERSION_BASE=$(echo "${MIX_VERSION}" | sed 's/-dev$//')
