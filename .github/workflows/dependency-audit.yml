@@ -38,23 +38,21 @@ jobs:
       - uses: actions/cache@v4
         id: cargo-tools-cache
         with:
-          path: ~/.cargo/bin/cargo-outdated
-          key: cargo-outdated-${{ runner.os }}-v1
+          path: |
+            ~/.cargo/bin/cargo-outdated
+            ~/.cargo/bin/cargo-deny
+          key: cargo-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
         if: steps.cargo-tools-cache.outputs.cache-hit != 'true'
         uses: cargo-bins/cargo-binstall@main
 
-      - name: Install cargo-outdated
+      - name: Install cargo tools
         if: steps.cargo-tools-cache.outputs.cache-hit != 'true'
-        run: cargo binstall --no-confirm cargo-outdated
+        run: cargo binstall --no-confirm cargo-outdated cargo-deny
 
       - name: Check for outdated Rust dependencies
         run: cd native/pcap_file_ex && cargo outdated --exit-code 0
 
-      # Use official cargo-deny action (fast with built-in caching)
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          manifest-path: native/pcap_file_ex/Cargo.toml
-          command: check
-          arguments: advisories licenses
+      - name: Check for security advisories and license issues
+        run: cd native/pcap_file_ex && cargo deny check advisories licenses
