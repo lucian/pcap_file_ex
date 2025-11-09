@@ -3,7 +3,7 @@ defmodule PcapFileEx.Packet do
   Represents a captured network packet.
   """
 
-  alias PcapFileEx.{DecoderRegistry, Endpoint, HTTP, Interface}
+  alias PcapFileEx.{DecoderRegistry, Endpoint, HTTP, Interface, Timestamp}
 
   @loopback_ipv6_families [10, 23, 24, 28, 30]
   @pkt_protocol_map %{
@@ -21,6 +21,7 @@ defmodule PcapFileEx.Packet do
 
   @type t :: %__MODULE__{
           timestamp: DateTime.t(),
+          timestamp_precise: Timestamp.t(),
           orig_len: non_neg_integer(),
           data: binary(),
           datalink: String.t() | nil,
@@ -40,6 +41,7 @@ defmodule PcapFileEx.Packet do
 
   defstruct [
     :timestamp,
+    :timestamp_precise,
     :orig_len,
     :data,
     :datalink,
@@ -61,8 +63,11 @@ defmodule PcapFileEx.Packet do
   @spec from_map(map()) :: t()
   def from_map(map) do
     datalink = Map.get(map, :datalink)
+    # Create DateTime timestamp (microsecond precision, for backward compatibility)
     timestamp = DateTime.from_unix!(map.timestamp_secs, :second)
-    timestamp = DateTime.add(timestamp, map.timestamp_nanos, :nanosecond)
+    timestamp = DateTime.add(timestamp, div(map.timestamp_nanos, 1000), :microsecond)
+    # Create precise timestamp (full nanosecond precision)
+    timestamp_precise = Timestamp.new(map.timestamp_secs, map.timestamp_nanos)
     base_data = :binary.list_to_bin(map.data)
     {data, normalized_datalink} = normalize_loopback(base_data, datalink)
     {protocols, src, dst, layers, payload} = extract_metadata(data, normalized_datalink)
@@ -73,6 +78,7 @@ defmodule PcapFileEx.Packet do
 
     %__MODULE__{
       timestamp: timestamp,
+      timestamp_precise: timestamp_precise,
       orig_len: map.orig_len,
       data: data,
       datalink: normalized_datalink,

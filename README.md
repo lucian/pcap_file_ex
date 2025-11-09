@@ -555,23 +555,116 @@ Timestamps are **preserved in their original precision** - there is no automatic
 
 PCAPNG files have their own timestamp resolution metadata and are fully supported on all platforms.
 
+### Nanosecond Precision Timestamps
+
+**New in v0.2.0:** Full nanosecond precision support for accurate time analysis and packet sorting.
+
+Elixir's `DateTime` type has a limitation: it only supports **microsecond precision** (6 decimal places), not nanosecond precision (9 decimal places). This means timestamps from nanosecond-resolution PCAP files get truncated.
+
+To solve this, PcapFileEx now provides **two timestamp fields** on each packet:
+
+```elixir
+%PcapFileEx.Packet{
+  timestamp: ~U[2024-11-08 11:24:09.735188Z],  # DateTime (microsecond precision)
+  timestamp_precise: %PcapFileEx.Timestamp{     # FULL nanosecond precision
+    secs: 1731065049,
+    nanos: 735188123  # All 9 digits preserved!
+  },
+  # ... other fields
+}
+```
+
+**When to use which field:**
+
+- **`timestamp`** (DateTime) - Use for display, logging, and when microsecond precision is sufficient
+- **`timestamp_precise`** (Timestamp) - Use for sorting, merging multiple files, or precise time analysis
+
+**Example: Merging packets from multiple files chronologically**
+
+```elixir
+# Read packets from multiple PCAP files
+files = ["capture1.pcapng", "capture2.pcapng", "capture3.pcapng"]
+
+all_packets =
+  files
+  |> Enum.flat_map(fn file ->
+    {:ok, packets} = PcapFileEx.read_all(file)
+    packets
+  end)
+  |> Enum.sort_by(& &1.timestamp_precise, PcapFileEx.Timestamp)
+
+# Now all packets are in chronological order with nanosecond precision
+```
+
+**Example: Calculate precise time differences**
+
+```elixir
+{:ok, packets} = PcapFileEx.read_all("capture.pcapng")
+[first, second | _] = packets
+
+# Get difference in nanoseconds
+diff_nanos = PcapFileEx.Timestamp.diff(second.timestamp_precise, first.timestamp_precise)
+IO.puts("Time between packets: #{diff_nanos} nanoseconds")
+
+# Convert to other units
+diff_micros = div(diff_nanos, 1000)
+diff_millis = div(diff_nanos, 1_000_000)
+```
+
+**Timestamp API:**
+
+```elixir
+alias PcapFileEx.Timestamp
+
+# Create a timestamp
+ts = Timestamp.new(secs, nanos)
+
+# Convert to total nanoseconds (useful for comparisons)
+total_ns = Timestamp.to_unix_nanos(ts)
+# => 1731065049735188123
+
+# Convert to DateTime (loses nanosecond precision)
+dt = Timestamp.to_datetime(ts)
+# => ~U[2024-11-08 11:24:09.735188Z]
+
+# Compare timestamps
+Timestamp.compare(ts1, ts2)  # => :lt | :eq | :gt
+
+# Calculate difference in nanoseconds
+Timestamp.diff(ts1, ts2)  # => integer (nanoseconds)
+```
+
+**Backward Compatibility:**
+
+Existing code continues to work unchanged - the `timestamp` field is still a `DateTime` for convenience:
+
+```elixir
+# Your existing code still works!
+packet.timestamp.year  # => 2024
+packet.timestamp.month  # => 11
+DateTime.compare(packet.timestamp, some_datetime)  # => :lt
+```
+
+See `PcapFileEx.Timestamp` module documentation for complete API details.
+
 ## Data Structures
 
 ### Packet
 
 ```elixir
 %PcapFileEx.Packet{
-  timestamp: ~U[2025-11-02 12:34:56.123456Z],  # DateTime
-  orig_len: 1514,                               # Original packet length
-  data: <<0x00, 0x01, 0x02, ...>>,             # Raw packet data (binary)
-  datalink: "ethernet",                         # Link-layer type for the packet
-  protocols: [:ether, :ipv4, :tcp, :http],      # Ordered protocol stack
-  protocol: :tcp,                               # Highest decoded protocol (:tcp, :udp, ...)
+  timestamp: ~U[2025-11-02 12:34:56.123456Z],               # DateTime (microsecond precision)
+  timestamp_precise: %PcapFileEx.Timestamp{...},            # Full nanosecond precision (v0.2.0+)
+  orig_len: 1514,                                           # Original packet length
+  data: <<0x00, 0x01, 0x02, ...>>,                          # Raw packet data (binary)
+  datalink: "ethernet",                                      # Link-layer type for the packet
+  protocols: [:ether, :ipv4, :tcp, :http],                  # Ordered protocol stack
+  protocol: :tcp,                                            # Highest decoded protocol (:tcp, :udp, ...)
   src: %PcapFileEx.Endpoint{ip: "127.0.0.1", port: 55014},
   dst: %PcapFileEx.Endpoint{ip: "127.0.0.1", port: 8899},
-  layers: [:ipv4, :tcp, :http],                 # Protocol layers (cached)
-  payload: "GET /hello ...",                    # Payload used during decoding
-  decoded: %{http: %PcapFileEx.HTTP{...}}        # Cached decoded payloads
+  layers: [:ipv4, :tcp, :http],                             # Protocol layers (cached)
+  payload: "GET /hello ...",                                 # Payload used during decoding
+  decoded: %{http: %PcapFileEx.HTTP{...}}                    # Cached decoded payloads
 }
 
 Loopback captures are normalized automatically: the 4-byte pseudo-header is removed and `datalink`

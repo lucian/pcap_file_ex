@@ -3,9 +3,19 @@
 ## [Unreleased]
 
 ### Added
+- **Nanosecond Timestamp Precision Support** (v0.2.0)
+  - New `PcapFileEx.Timestamp` module for nanosecond-precision timestamps
+  - All packets now include both `timestamp` (DateTime, microsecond precision) and `timestamp_precise` (Timestamp, nanosecond precision)
+  - Zero breaking changes - existing code using `packet.timestamp` continues to work
+  - Full API for timestamp operations: `new/2`, `to_unix_nanos/1`, `to_datetime/1`, `from_datetime/2`, `compare/2`, `diff/2`
+  - Implements String.Chars and Inspect protocols for pretty printing
+  - Ideal for merging packets from multiple files chronologically with nanosecond accuracy
+  - Comprehensive test suite with 80+ test cases
 
 ### Changed
 - improved documentation
+- Updated `PcapFileEx.Packet` struct to include `timestamp_precise` field
+- Modified timestamp conversion to preserve nanosecond precision when possible
 
 ### Fixed
 

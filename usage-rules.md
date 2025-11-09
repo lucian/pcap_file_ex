@@ -439,6 +439,125 @@ Use Elixir Filter when:
 - ✅ Need complex application logic
 - ✅ Need to check decoded payloads
 
+## Timestamp Precision (v0.2.0+)
+
+### Understanding Timestamp Fields
+
+Each packet has **two timestamp fields**:
+
+1. **`timestamp`** (DateTime) - Microsecond precision (6 decimal places)
+   - Use for: Display, logging, general time queries
+   - Backward compatible with existing code
+
+2. **`timestamp_precise`** (Timestamp) - Nanosecond precision (9 decimal places)
+   - Use for: Sorting, merging multiple files, precise timing analysis
+   - Required for nanosecond-resolution PCAP files (common on Linux)
+
+### Common Use Cases
+
+#### ✅ Merging Packets from Multiple Files
+
+```elixir
+# Merge packets from multiple captures in chronological order
+files = ["capture1.pcapng", "capture2.pcapng", "capture3.pcapng"]
+
+all_packets =
+  files
+  |> Enum.flat_map(fn file ->
+    {:ok, packets} = PcapFileEx.read_all(file)
+    packets
+  end)
+  |> Enum.sort_by(& &1.timestamp_precise, PcapFileEx.Timestamp)
+
+# Now packets are in perfect chronological order with nanosecond precision
+```
+
+#### ✅ Calculating Precise Time Differences
+
+```elixir
+{:ok, packets} = PcapFileEx.read_all("capture.pcapng")
+[first, second | _] = packets
+
+# Get difference in nanoseconds
+diff_ns = PcapFileEx.Timestamp.diff(second.timestamp_precise, first.timestamp_precise)
+IO.puts("Time between packets: #{diff_ns} nanoseconds")
+
+# Convert to other units
+diff_us = div(diff_ns, 1000)        # microseconds
+diff_ms = div(diff_ns, 1_000_000)   # milliseconds
+```
+
+#### ✅ Filtering by Precise Time Range
+
+```elixir
+# Find packets within a specific nanosecond-precision window
+start_ts = PcapFileEx.Timestamp.new(1731065049, 735000000)
+end_ts = PcapFileEx.Timestamp.new(1731065049, 736000000)
+
+packets_in_window =
+  PcapFileEx.stream("capture.pcapng")
+  |> Stream.filter(fn p ->
+    PcapFileEx.Timestamp.compare(p.timestamp_precise, start_ts) != :lt and
+    PcapFileEx.Timestamp.compare(p.timestamp_precise, end_ts) != :gt
+  end)
+  |> Enum.to_list()
+```
+
+### When to Use Which Field
+
+| Use Case | Use `timestamp` | Use `timestamp_precise` |
+|----------|----------------|------------------------|
+| Display to users | ✅ | ❌ |
+| Simple time filters | ✅ | ❌ |
+| Sorting packets | ❌ | ✅ |
+| Merging files | ❌ | ✅ |
+| Sub-microsecond timing | ❌ | ✅ |
+| Nanosecond analysis | ❌ | ✅ |
+
+### Timestamp API Reference
+
+```elixir
+alias PcapFileEx.Timestamp
+
+# Create timestamp
+ts = Timestamp.new(secs, nanos)
+
+# Convert to total nanoseconds
+total_ns = Timestamp.to_unix_nanos(ts)
+
+# Convert to DateTime (loses nanosecond precision)
+dt = Timestamp.to_datetime(ts)
+
+# Compare timestamps
+Timestamp.compare(ts1, ts2)  # => :lt | :eq | :gt
+
+# Calculate difference
+diff_ns = Timestamp.diff(ts1, ts2)  # => integer (nanoseconds)
+```
+
+### ❌ Common Mistake: Using DateTime for Sorting
+
+```elixir
+# DON'T: Use DateTime for sorting (loses nanosecond precision!)
+packets
+|> Enum.sort_by(& &1.timestamp)
+
+# DO: Use Timestamp for accurate sorting
+packets
+|> Enum.sort_by(& &1.timestamp_precise, PcapFileEx.Timestamp)
+```
+
+### Backward Compatibility
+
+Existing code continues to work unchanged:
+
+```elixir
+# All of this still works!
+packet.timestamp.year        # => 2024
+packet.timestamp.month       # => 11
+DateTime.compare(packet.timestamp, some_datetime)  # => :lt
+```
+
 ## Related Documentation
 
 - [Performance Guide](usage-rules/performance.md) - Detailed performance optimization
