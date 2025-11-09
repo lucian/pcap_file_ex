@@ -99,7 +99,11 @@ defmodule PcapFileEx.MixProject do
         "cmd cargo clippy --manifest-path=native/pcap_file_ex/Cargo.toml -- -Dwarnings"
       ],
       "rust.fmt": ["cmd cargo fmt --manifest-path=native/pcap_file_ex/Cargo.toml --all"],
-      ci: ["format", "rust.fmt", "rust.lint", "test"]
+      ci: ["format", "rust.fmt", "rust.lint", "test"],
+      tidewave:
+        "run --no-halt -e 'Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000) end)'",
+      "tidewave-iex":
+        "run --no-start -e 'Application.ensure_all_started(:tidewave); {:ok, _} = Bandit.start_link(plug: Tidewave, port: 4000); IO.puts(\"Tidewave MCP server started on port 4000\")'"
     ]
   end
 
@@ -132,7 +136,9 @@ defmodule PcapFileEx.MixProject do
       {:benchee, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:igniter, "~> 0.7.0"},
-      {:stream_data, "~> 1.2", only: [:dev, :test], runtime: false}
+      {:stream_data, "~> 1.2", only: [:dev, :test], runtime: false},
+      {:tidewave, "~> 0.5.1", only: :dev},
+      {:bandit, "~> 1.0", only: :dev}
     ]
   end
 end

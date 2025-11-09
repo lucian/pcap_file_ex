@@ -142,6 +142,71 @@ For developing and testing PcapFileEx, you'll need:
 - **dumpcap** - For generating test fixtures (optional but recommended)
 - **Python 3** - For test traffic generation scripts
 
+### Tidewave MCP Integration (Optional)
+
+This project supports [Tidewave MCP](https://hexdocs.pm/tidewave/mcp.html) for enhanced development with live code evaluation and documentation access.
+
+**Setup:**
+
+1. Add Tidewave to your dependencies (if not already present):
+```elixir
+# mix.exs
+def deps do
+  [
+    {:tidewave, "~> 0.1", only: :dev}
+  ]
+end
+```
+
+2. Start the Tidewave MCP server (choose one):
+
+**Option A: Background server (no IEx shell)**
+```bash
+mix tidewave
+```
+
+**Option B: Interactive IEx shell with MCP server**
+```bash
+iex -S mix tidewave-iex
+```
+
+Both options start a Bandit server on port 4000 with the Tidewave plug. Use Option B when you want both MCP access and an interactive Elixir shell for manual testing.
+
+3. MCP configuration (`.mcp.json` - already configured in this project):
+```json
+{
+  "mcpServers": {
+    "tidewave": {
+      "type": "http",
+      "url": "http://localhost:4000/tidewave/mcp"
+    }
+  }
+}
+```
+
+**Available Tools:**
+- `mcp__tidewave__project_eval` - Run Elixir code in project context
+- `mcp__tidewave__get_docs` - Access module/function documentation
+- `mcp__tidewave__get_source_location` - Find source definitions
+- `mcp__tidewave__get_logs` - View application logs
+- `mcp__tidewave__search_package_docs` - Search dependency documentation
+
+**Example Usage:**
+```elixir
+# Test a function
+mcp__tidewave__project_eval({
+  code: "PcapFileEx.Packet.new(1234567890, 0, 100, <<1,2,3>>)"
+})
+
+# Get documentation
+mcp__tidewave__get_docs({reference: "PcapFileEx.Pcap.open/1"})
+
+# Find source location
+mcp__tidewave__get_source_location({reference: "PcapFileEx.Stream"})
+```
+
+This is particularly useful when working with AI coding assistants like Claude Code, as it provides live introspection of your running Elixir project.
+
 ### Installing dumpcap
 
 dumpcap is used to generate test fixtures. While optional, some tests will be skipped without it.

@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### Added
+- **Tidewave MCP Integration** for enhanced development experience
+  - Live code evaluation in project context via `mcp__tidewave__project_eval`
+  - Module/function documentation access via `mcp__tidewave__get_docs`
+  - Source location lookup via `mcp__tidewave__get_source_location`
+  - Application log inspection via `mcp__tidewave__get_logs`
+  - Dependency documentation search via `mcp__tidewave__search_package_docs`
+  - Configured in `.mcp.json` for seamless integration with AI coding assistants
+  - Particularly useful with Claude Code for live introspection and testing
+  - Includes two Mix aliases for starting the MCP server:
+    - `mix tidewave` - Background server (no IEx shell)
+    - `iex -S mix tidewave-iex` - Interactive IEx shell with MCP server
 - **Nanosecond Timestamp Precision Support** (v0.2.0)
   - New `PcapFileEx.Timestamp` module for nanosecond-precision timestamps
   - All packets now include both `timestamp` (DateTime, microsecond precision) and `timestamp_precise` (Timestamp, nanosecond precision)
