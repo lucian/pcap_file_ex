@@ -102,10 +102,13 @@ defmodule PcapFileEx.MixProject do
   defp aliases do
     [
       clean: ["clean", &clean_native/1],
+      setup: ["deps.get", &setup_dev_tools/1, "compile", "git_hooks.install"],
       "rust.lint": [
         "cmd cargo clippy --manifest-path=native/pcap_file_ex/Cargo.toml -- -Dwarnings"
       ],
       "rust.fmt": ["cmd cargo fmt --manifest-path=native/pcap_file_ex/Cargo.toml --all"],
+      "deps.check": [&check_deps_tools/1, "hex.outdated", &check_cargo_outdated/1],
+      "check.doctor": [&run_doctor_checks/1],
       ci: ["format", "rust.fmt", "rust.lint", "test"],
       tidewave:
         "run --no-halt -e 'Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000) end)'",
@@ -132,6 +135,169 @@ defmodule PcapFileEx.MixProject do
     :ok
   end
 
+  defp setup_dev_tools(_) do
+    IO.puts("\n📦 Setting up development tools...")
+
+    tools = [
+      {"cargo-outdated", "cargo install --locked cargo-outdated"},
+      {"cargo-deny", "cargo install --locked cargo-deny"}
+    ]
+
+    Enum.each(tools, fn {tool, install_cmd} ->
+      case System.cmd("cargo", [String.replace(tool, "cargo-", ""), "--version"],
+             stderr_to_stdout: true
+           ) do
+        {_, 0} ->
+          IO.puts("  ✓ #{tool} already installed")
+
+        _ ->
+          IO.puts("  ⚙ Installing #{tool}...")
+
+          case System.cmd("sh", ["-c", install_cmd], into: IO.stream(:stdio, :line)) do
+            {_, 0} ->
+              IO.puts("  ✓ #{tool} installed successfully")
+
+            _ ->
+              IO.puts("  ⚠ Failed to install #{tool}. You may need to install it manually.")
+          end
+      end
+    end)
+
+    IO.puts("\n✓ Setup complete! Run `mix check.doctor` to verify your environment.\n")
+    :ok
+  end
+
+  defp check_deps_tools(_) do
+    # This function checks if required tools are available before running deps.check
+    missing = []
+
+    missing =
+      case System.cmd("cargo", ["outdated", "--version"], stderr_to_stdout: true) do
+        {_, 0} -> missing
+        _ -> ["cargo-outdated" | missing]
+      end
+
+    if missing != [] do
+      IO.puts(:stderr, "\n❌ Missing required tools: #{Enum.join(missing, ", ")}")
+      IO.puts(:stderr, "Run `mix setup` or `cargo install #{Enum.join(missing, " ")}`\n")
+      exit({:shutdown, 1})
+    end
+
+    :ok
+  end
+
+  defp check_cargo_outdated(_) do
+    case System.cmd(
+           "cargo",
+           ["outdated", "--manifest-path=native/pcap_file_ex/Cargo.toml"],
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        IO.puts(output)
+        :ok
+
+      {output, _} ->
+        IO.puts(output)
+        IO.puts("Note: cargo-outdated check completed with warnings")
+        :ok
+    end
+  end
+
+  defp run_doctor_checks(_) do
+    IO.puts("\n🔍 Running environment health checks...\n")
+
+    checks = [
+      check_elixir_version(),
+      check_erlang_version(),
+      check_rust_version(),
+      check_cargo_tool("cargo-outdated"),
+      check_cargo_tool("cargo-deny"),
+      check_git_hooks()
+    ]
+
+    {passed, failed} =
+      Enum.split_with(checks, fn {status, _, _} -> status == :ok end)
+
+    IO.puts("\n" <> String.duplicate("─", 50))
+    IO.puts("Summary: #{length(passed)} passed, #{length(failed)} failed")
+
+    if failed != [] do
+      IO.puts("\n💡 To fix missing tools, run: mix setup\n")
+      exit({:shutdown, 1})
+    else
+      IO.puts("\n✓ All checks passed! Your environment is ready.\n")
+    end
+
+    :ok
+  end
+
+  defp check_elixir_version do
+    version = System.version()
+    required = "1.18.0"
+
+    if Version.match?(version, ">= #{required}") do
+      IO.puts("  ✓ Elixir #{version}")
+      {:ok, :elixir, version}
+    else
+      IO.puts("  ✗ Elixir #{version} (>= #{required} required)")
+      {:error, :elixir, version}
+    end
+  end
+
+  defp check_erlang_version do
+    version = :erlang.system_info(:otp_release) |> to_string()
+
+    IO.puts("  ✓ Erlang/OTP #{version}")
+    {:ok, :erlang, version}
+  end
+
+  defp check_rust_version do
+    case System.cmd("cargo", ["--version"], stderr_to_stdout: true) do
+      {output, 0} ->
+        version = output |> String.trim() |> String.replace("cargo ", "")
+        IO.puts("  ✓ Rust/Cargo #{version}")
+        {:ok, :rust, version}
+
+      _ ->
+        IO.puts("  ✗ Rust/Cargo not found")
+        {:error, :rust, nil}
+    end
+  end
+
+  defp check_cargo_tool(tool) do
+    cmd = String.replace(tool, "cargo-", "")
+
+    case System.cmd("cargo", [cmd, "--version"], stderr_to_stdout: true) do
+      {output, 0} ->
+        version = output |> String.trim() |> String.split() |> Enum.at(1, "")
+        IO.puts("  ✓ #{tool} #{version}")
+        {:ok, String.to_atom(tool), version}
+
+      _ ->
+        IO.puts("  ✗ #{tool} not installed")
+        {:error, String.to_atom(tool), nil}
+    end
+  end
+
+  defp check_git_hooks do
+    hook_file = ".git/hooks/pre-commit"
+
+    if File.exists?(hook_file) do
+      content = File.read!(hook_file)
+
+      if String.contains?(content, "git_hooks") do
+        IO.puts("  ✓ Git hooks installed")
+        {:ok, :git_hooks, true}
+      else
+        IO.puts("  ⚠ Git hooks present but not from git_hooks (run mix git_hooks.install)")
+        {:error, :git_hooks, false}
+      end
+    else
+      IO.puts("  ✗ Git hooks not installed (run mix git_hooks.install)")
+      {:error, :git_hooks, false}
+    end
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
@@ -147,7 +313,8 @@ defmodule PcapFileEx.MixProject do
       {:tidewave, "~> 0.5.1", only: :dev},
       {:bandit, "~> 1.0", only: :dev},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:git_hooks, "~> 0.8.1", only: [:dev], runtime: false}
     ]
   end
 end

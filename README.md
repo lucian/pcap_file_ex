@@ -107,6 +107,119 @@ end
 
 Precompiled binaries will be downloaded automatically for supported platforms, eliminating the need for a Rust toolchain in most cases.
 
+## Getting Started
+
+New to this project? Get up and running in seconds:
+
+### Quick Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/lucian/pcap_file_ex.git
+cd pcap_file_ex
+
+# One-command setup (installs deps, tools, git hooks)
+mix setup
+
+# Verify your environment
+mix check.doctor
+```
+
+**What `mix setup` does:**
+1. Fetches Elixir dependencies
+2. Installs `cargo-outdated` and `cargo-deny` (Rust security tools)
+3. Compiles the project (including Rust NIFs)
+4. Installs git hooks for quality checks
+
+**What `mix check.doctor` verifies:**
+- ✓ Elixir version (>= 1.18)
+- ✓ Erlang/OTP version
+- ✓ Rust/Cargo installed
+- ✓ cargo-outdated installed
+- ✓ cargo-deny installed
+- ✓ Git hooks configured
+
+### Prerequisites
+
+Before running `mix setup`, ensure you have:
+- **Elixir** ~> 1.18 ([Install Guide](https://elixir-lang.org/install.html))
+- **Erlang/OTP** 27+ ([Usually comes with Elixir](https://elixir-lang.org/install.html))
+- **Rust** 1.91.0+ ([Install via rustup](https://rustup.rs/))
+
+### Development Workflow
+
+```bash
+# Run tests
+mix test
+
+# Run all quality checks locally (format, lint, test)
+mix ci
+
+# Check for outdated dependencies
+mix deps.check
+
+# Format code
+mix format
+```
+
+### Git Hooks
+
+Git hooks run automatically to catch issues before CI:
+
+**Pre-commit** (fast ~5-10s):
+- Format checks (Elixir + Rust)
+- Linting (Credo)
+
+**Pre-push** (slower ~30-60s):
+- Full test suite
+- Dialyzer type checking
+- Rust linting (Clippy)
+- Security audit (cargo-deny)
+
+**Skip hooks** when needed:
+```bash
+git commit --no-verify
+git push --no-verify
+```
+
+### First Steps
+
+1. **Run the test suite** to ensure everything works:
+   ```bash
+   mix test
+   ```
+
+2. **Explore the examples** in this README
+
+3. **Read the architecture** in the [CLAUDE.md](CLAUDE.md) file
+
+4. **Check the roadmap** to see what's planned
+
+### Troubleshooting Setup
+
+If `mix setup` fails or `mix check.doctor` shows errors:
+
+**Missing Rust:**
+```bash
+# Install Rust via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
+
+**Cargo tools installation fails:**
+```bash
+# Install manually
+cargo install cargo-outdated cargo-deny
+```
+
+**Git hooks not installed:**
+```bash
+# Install manually
+mix git_hooks.install
+```
+
+See the [Development Setup](#development-setup) section below for detailed environment configuration including dumpcap for test fixture generation.
+
 ## AI-Assisted Development
 
 This library includes comprehensive usage rules for LLM-based coding assistants. If you're using AI tools like Claude Code, GitHub Copilot, or Cursor, the library provides detailed guidance to help generate correct, performant code.

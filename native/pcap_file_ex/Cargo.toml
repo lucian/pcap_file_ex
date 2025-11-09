@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustler = "0.37.0"
-pcap-file = { git = "https://github.com/courvoif/pcap-file" }
+pcap-file = { git = "https://github.com/lucian/pcap-file", rev = "e60e2f9b614812360fdf6909b90a8b05283adb05" }
 thiserror = "1.0"
-etherparse = "0.15"
-ipnetwork = "0.20"
+etherparse = "0.19"
+ipnetwork = "0.21"

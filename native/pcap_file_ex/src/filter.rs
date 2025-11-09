@@ -175,6 +175,7 @@ impl FilterContext {
         match &parsed.net {
             Some(NetSlice::Ipv4(ipv4)) => IpAddr::V4(ipv4.header().source_addr()) == *target_ip,
             Some(NetSlice::Ipv6(ipv6)) => IpAddr::V6(ipv6.header().source_addr()) == *target_ip,
+            Some(NetSlice::Arp(_)) => false, // ARP packets don't have IP addresses
             None => false,
         }
     }
@@ -187,6 +188,7 @@ impl FilterContext {
             Some(NetSlice::Ipv6(ipv6)) => {
                 IpAddr::V6(ipv6.header().destination_addr()) == *target_ip
             }
+            Some(NetSlice::Arp(_)) => false, // ARP packets don't have IP addresses
             None => false,
         }
     }
@@ -201,6 +203,7 @@ impl FilterContext {
                 let ip = IpAddr::V6(ipv6.header().source_addr());
                 network.contains(ip)
             }
+            Some(NetSlice::Arp(_)) => false, // ARP packets don't have IP addresses
             None => false,
         }
     }
@@ -215,6 +218,7 @@ impl FilterContext {
                 let ip = IpAddr::V6(ipv6.header().destination_addr());
                 network.contains(ip)
             }
+            Some(NetSlice::Arp(_)) => false, // ARP packets don't have IP addresses
             None => false,
         }
     }

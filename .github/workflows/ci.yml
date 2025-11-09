@@ -157,3 +157,34 @@ jobs:
             echo "Cannot release with -dev suffix: ${{ steps.versions.outputs.mix }}"
             exit 1
           fi
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 28.1.1
+          elixir-version: 1.19.2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Elixir deps
+        run: mix deps.get
+
+      - name: Check for outdated Elixir dependencies
+        run: mix hex.outdated
+
+      - name: Install cargo-outdated
+        run: cargo install --locked cargo-outdated
+
+      - name: Check for outdated Rust dependencies
+        run: cargo outdated --manifest-path=native/pcap_file_ex/Cargo.toml --exit-code 0
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
+      - name: Check for security advisories and license issues
+        run: cargo deny check --manifest-path=native/pcap_file_ex/Cargo.toml advisories licenses
