@@ -26,7 +26,7 @@ Real-world benchmarks on 10GB PCAP file with 50M packets:
 Task: Find first 100 packets to port 443
 
 Method 1 - Elixir Filter:
-  PcapFileEx.stream("10gb.pcap")
+  PcapFileEx.stream!("10gb.pcap")
   |> Stream.filter(fn p -> p.dst.port == 443 end)
   |> Enum.take(100)
 
@@ -84,7 +84,7 @@ Method 2 - PreFilter:
 ### Streaming (`stream/1`)
 
 ```elixir
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(...)
 |> Enum.to_list()
 ```
@@ -115,15 +115,15 @@ PcapFileEx.stream("capture.pcap")
 {:ok, packets} = PcapFileEx.read_all("10gb.pcap")  # 10GB in RAM!
 
 # LOW memory - constant usage
-PcapFileEx.stream("10gb.pcap")
+PcapFileEx.stream!("10gb.pcap")
 |> Enum.each(fn packet -> process(packet) end)  # ~50MB constant
 
 # MEDIUM memory - accumulation
-PcapFileEx.stream("10gb.pcap")
+PcapFileEx.stream!("10gb.pcap")
 |> Enum.to_list()  # Eventually loads all, but gradually
 
 # LOW memory - early termination
-PcapFileEx.stream("10gb.pcap")
+PcapFileEx.stream!("10gb.pcap")
 |> Enum.take(1000)  # Stops after 1000 packets
 ```
 
@@ -131,19 +131,19 @@ PcapFileEx.stream("10gb.pcap")
 
 ```elixir
 # ✅ AUTOMATIC cleanup (recommended)
-PcapFileEx.stream("file.pcap") |> Enum.to_list()
+PcapFileEx.stream!("file.pcap") |> Enum.to_list()
 
 # ✅ MANUAL cleanup (advanced)
 {:ok, reader} = PcapFileEx.open("file.pcap")
 try do
-  packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(100)
+  packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.take(100)
 after
   PcapFileEx.Pcap.close(reader)  # Always executes
 end
 
 # ❌ LEAK - reader never closed!
 {:ok, reader} = PcapFileEx.open("file.pcap")
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 # Missing close!
 ```
 
@@ -155,21 +155,21 @@ Decoding adds CPU overhead. Disable when you don't need protocol information:
 
 ```elixir
 # ✅ Disable decode for raw metrics
-packet_count = PcapFileEx.stream("large.pcap", decode: false)
+packet_count = PcapFileEx.stream!("large.pcap", decode: false)
 |> Enum.count()
 
-total_bytes = PcapFileEx.stream("large.pcap", decode: false)
+total_bytes = PcapFileEx.stream!("large.pcap", decode: false)
 |> Stream.map(&byte_size(&1.data))
 |> Enum.sum()
 
 # Find timestamp range
-{first_ts, last_ts} = PcapFileEx.stream("large.pcap", decode: false)
+{first_ts, last_ts} = PcapFileEx.stream!("large.pcap", decode: false)
 |> Enum.reduce({nil, nil}, fn p, {first, _last} ->
   {first || p.timestamp, p.timestamp}
 end)
 
 # ❌ Keep decode enabled when you need protocol info
-http_packets = PcapFileEx.stream("large.pcap")  # decode: true (default)
+http_packets = PcapFileEx.stream!("large.pcap")  # decode: true (default)
 |> Stream.filter(fn p -> :http in p.protocols end)
 |> Enum.to_list()
 ```
@@ -204,7 +204,7 @@ With decode: false
 # Speed: Slower per-packet, but works on huge files
 
 # From existing stream
-stats = PcapFileEx.stream("file.pcap")
+stats = PcapFileEx.stream!("file.pcap")
 |> PcapFileEx.Filter.by_protocol(:tcp)
 |> PcapFileEx.Stats.compute_from_stream()
 ```
@@ -277,14 +277,14 @@ PreFilter.any([
 tcp_packets = Enum.filter(packets, fn p -> :tcp in p.protocols end)
 
 # DO: Stream instead
-tcp_packets = PcapFileEx.stream("huge_10gb.pcap")
+tcp_packets = PcapFileEx.stream!("huge_10gb.pcap")
 |> Stream.filter(fn p -> :tcp in p.protocols end)
 |> Enum.to_list()
 
 # BETTER: Use PreFilter if selective
 {:ok, reader} = PcapFileEx.open("huge_10gb.pcap")
 :ok = PcapFileEx.Pcap.set_filter(reader, [PreFilter.protocol("tcp")])
-tcp_packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+tcp_packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 PcapFileEx.Pcap.close(reader)
 ```
 
@@ -292,16 +292,16 @@ PcapFileEx.Pcap.close(reader)
 
 ```elixir
 # DON'T: Read file multiple times
-tcp_count = PcapFileEx.stream("huge.pcap")
+tcp_count = PcapFileEx.stream!("huge.pcap")
 |> Stream.filter(fn p -> :tcp in p.protocols end)
 |> Enum.count()
 
-udp_count = PcapFileEx.stream("huge.pcap")  # Re-reads entire file!
+udp_count = PcapFileEx.stream!("huge.pcap")  # Re-reads entire file!
 |> Stream.filter(fn p -> :udp in p.protocols end)
 |> Enum.count()
 
 # DO: Single pass with accumulator
-{tcp_count, udp_count} = PcapFileEx.stream("huge.pcap")
+{tcp_count, udp_count} = PcapFileEx.stream!("huge.pcap")
 |> Enum.reduce({0, 0}, fn packet, {tcp, udp} ->
   cond do
     :tcp in packet.protocols -> {tcp + 1, udp}
@@ -315,12 +315,12 @@ end)
 
 ```elixir
 # DON'T: Decode when you only need size
-sizes = PcapFileEx.stream("large.pcap")  # decode: true (default)
+sizes = PcapFileEx.stream!("large.pcap")  # decode: true (default)
 |> Stream.map(&byte_size(&1.data))
 |> Enum.to_list()
 
 # DO: Disable decode
-sizes = PcapFileEx.stream("large.pcap", decode: false)
+sizes = PcapFileEx.stream!("large.pcap", decode: false)
 |> Stream.map(&byte_size(&1.data))
 |> Enum.to_list()
 ```
@@ -329,11 +329,11 @@ sizes = PcapFileEx.stream("large.pcap", decode: false)
 
 ```elixir
 # DON'T: Lose streaming benefits
-packets = PcapFileEx.stream("huge.pcap") |> Enum.to_list()  # Loads all!
+packets = PcapFileEx.stream!("huge.pcap") |> Enum.to_list()  # Loads all!
 first_http = Enum.find(packets, fn p -> :http in p.protocols end)
 
 # DO: Keep streaming
-first_http = PcapFileEx.stream("huge.pcap")
+first_http = PcapFileEx.stream!("huge.pcap")
 |> Enum.find(fn p -> :http in p.protocols end)  # Stops at first match
 ```
 
@@ -373,7 +373,7 @@ Before processing a PCAP file, ask:
 # Task: Find first 10 GET requests to /api/* in 5GB file
 
 # ❌ SLOW (150 seconds)
-PcapFileEx.stream("5gb.pcap")
+PcapFileEx.stream!("5gb.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].method == "GET" and
@@ -387,7 +387,7 @@ end)
   PreFilter.protocol("tcp"),
   PreFilter.port_dest(80)
 ])
-packets = PcapFileEx.Stream.from_reader(reader)
+packets = PcapFileEx.Stream.from_reader!(reader)
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].method == "GET" and
@@ -416,7 +416,7 @@ IO.inspect(stats.protocols)
 # Task: Extract all HTTPS traffic from 10GB file to new file
 
 # ❌ SLOW (uses Elixir filtering)
-PcapFileEx.stream("10gb.pcap")
+PcapFileEx.stream!("10gb.pcap")
 |> Stream.filter(fn p -> :tcp in p.protocols and p.dst.port == 443 end)
 |> Stream.map(& &1.data)
 # ... write to new file ...
@@ -427,7 +427,7 @@ PcapFileEx.stream("10gb.pcap")
   PreFilter.protocol("tcp"),
   PreFilter.port_dest(443)
 ])
-PcapFileEx.Stream.from_reader(reader)
+PcapFileEx.Stream.from_reader!(reader)
 |> Stream.map(& &1.data)
 # ... write to new file ...
 PcapFileEx.Pcap.close(reader)

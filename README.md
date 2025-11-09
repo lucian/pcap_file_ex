@@ -306,16 +306,20 @@ end)
 
 ```elixir
 # Works with both formats - automatically detected
-PcapFileEx.stream("large_capture.pcap")
+# v0.2.0+: stream/1 returns {:ok, stream} | {:error, reason}
+{:ok, stream} = PcapFileEx.stream("large_capture.pcap")
+stream
 |> Stream.filter(fn packet -> byte_size(packet.data) > 1000 end)
 |> Stream.map(fn packet -> parse_packet(packet.data) end)
 |> Enum.take(100)
 
-PcapFileEx.stream("large_capture.pcapng")
+# Or use stream!/1 for convenience (raises on error)
+PcapFileEx.stream!("large_capture.pcapng")
 |> Enum.count()
 
 # Disable automatic decoder attachment for performance-sensitive pipelines
-PcapFileEx.stream("large_capture.pcapng", decode: false)
+{:ok, stream} = PcapFileEx.stream("large_capture.pcapng", decode: false)
+stream
 |> Stream.map(&byte_size(&1.data))
 |> Enum.sum()
 ```
@@ -355,8 +359,10 @@ Each packet from a PCAPNG capture also carries `interface_id`, `interface`, and 
 ### Filter by packet size
 
 ```elixir
+{:ok, stream} = PcapFileEx.stream("capture.pcap")
+
 large_packets =
-  PcapFileEx.stream("capture.pcap")
+  stream
   |> Stream.filter(fn packet -> byte_size(packet.data) > 1500 end)
   |> Enum.to_list()
 ```
@@ -364,9 +370,9 @@ large_packets =
 ### Count packets
 
 ```elixir
-count =
-  PcapFileEx.stream("capture.pcap")
-  |> Enum.count()
+{:ok, stream} = PcapFileEx.stream("capture.pcap")
+
+count = stream |> Enum.count()
 
 IO.puts("Total packets: #{count}")
 ```
@@ -377,8 +383,10 @@ IO.puts("Total packets: #{count}")
 start_time = ~U[2025-11-02 10:00:00Z]
 end_time = ~U[2025-11-02 11:00:00Z]
 
+{:ok, stream} = PcapFileEx.stream("capture.pcap")
+
 packets_in_range =
-  PcapFileEx.stream("capture.pcap")
+  stream
   |> Stream.filter(fn packet ->
     DateTime.compare(packet.timestamp, start_time) != :lt and
     DateTime.compare(packet.timestamp, end_time) != :gt
@@ -389,7 +397,9 @@ packets_in_range =
 ### Process in batches
 
 ```elixir
-PcapFileEx.stream("capture.pcap")
+{:ok, stream} = PcapFileEx.stream("capture.pcap")
+
+stream
 |> Stream.chunk_every(1000)
 |> Enum.each(fn batch ->
   # Process 1000 packets at a time
@@ -410,8 +420,10 @@ IO.puts("Avg packet size: #{stats.avg_packet_size}")
 {:ok, stats} = PcapFileEx.Stats.compute_streaming("huge_10gb.pcap")
 
 # Combine with filtering
+{:ok, stream} = PcapFileEx.stream("capture.pcap")
+
 tcp_stats =
-  PcapFileEx.stream("capture.pcap")
+  stream
   |> Stream.filter(fn p -> :tcp in p.protocols end)
   |> PcapFileEx.Stats.compute_streaming()
 ```
@@ -420,7 +432,9 @@ tcp_stats =
 
 ```elixir
 # Chain multiple filters
-PcapFileEx.stream("capture.pcap")
+{:ok, stream} = PcapFileEx.stream("capture.pcap")
+
+stream
 |> PcapFileEx.Filter.by_size(100..1500)
 |> PcapFileEx.Filter.larger_than(500)
 |> PcapFileEx.Filter.contains("HTTP")
@@ -430,7 +444,9 @@ PcapFileEx.stream("capture.pcap")
 start_time = ~U[2025-11-02 10:00:00Z]
 end_time = ~U[2025-11-02 11:00:00Z]
 
-PcapFileEx.stream("capture.pcap")
+{:ok, stream} = PcapFileEx.stream("capture.pcap")
+
+stream
 |> PcapFileEx.Filter.by_time_range(start_time, end_time)
 |> Enum.to_list()
 ```
@@ -454,7 +470,8 @@ filters = [
 :ok = PcapFileEx.Pcap.set_filter(reader, filters)
 
 # Stream only matching packets (filtered in Rust!)
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(100)
+{:ok, stream} = PcapFileEx.Stream.from_reader(reader)
+packets = stream |> Enum.take(100)
 
 PcapFileEx.Pcap.close(reader)
 
@@ -464,7 +481,8 @@ PcapFileEx.Pcap.close(reader)
   PreFilter.ip_source_cidr("192.168.1.0/24"),
   PreFilter.size_min(1000)
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+{:ok, stream} = PcapFileEx.Stream.from_reader(reader)
+packets = stream |> Enum.to_list()
 PcapFileEx.PcapNg.close(reader)
 
 # Available filter types:
@@ -495,26 +513,27 @@ dramatically reducing memory allocation, GC pressure, and CPU usage. Benchmarks 
 
 ```elixir
 # Pull only HTTP application payloads
+{:ok, stream} = PcapFileEx.stream("capture.pcapng")
+
 http_packets =
-  PcapFileEx.stream("capture.pcapng")
+  stream
   |> PcapFileEx.Filter.by_protocol(:http)
   |> Enum.to_list()
 
 # Transport-level filtering works the same way
-tcp_handshakes =
-  PcapFileEx.stream("capture.pcapng")
-  |> PcapFileEx.Filter.by_protocol(:tcp)
-  |> Enum.take(5)
+PcapFileEx.stream!("capture.pcapng")
+|> PcapFileEx.Filter.by_protocol(:tcp)
+|> Enum.take(5)
 
 # Decode filtered packets into structured HTTP messages
 decoded_http =
-PcapFileEx.stream("capture.pcapng")
-|> PcapFileEx.Filter.by_protocol(:http)
-|> Enum.map(&PcapFileEx.Packet.decode_http!/1)
+  PcapFileEx.stream!("capture.pcapng")
+  |> PcapFileEx.Filter.by_protocol(:http)
+  |> Enum.map(&PcapFileEx.Packet.decode_http!/1)
 
 # Keep packet metadata + decoded payloads
 packets_with_decoded =
-  PcapFileEx.stream("capture.pcapng")
+  PcapFileEx.stream!("capture.pcapng")
   |> Enum.map(&PcapFileEx.Packet.attach_decoded/1)
 
 Enum.each(packets_with_decoded, fn packet ->
@@ -554,14 +573,14 @@ when you want to remove a custom decoder.
 ### Display filters
 
 ```elixir
-PcapFileEx.stream("capture.pcapng")
+PcapFileEx.stream!("capture.pcapng")
 |> PcapFileEx.DisplayFilter.filter("ip.src == 127.0.0.1 && http.request.method == \"GET\"")
 |> Enum.to_list()
 
 # Precompile when reusing across streams
 {:ok, filter} = PcapFileEx.DisplayFilter.compile("tcp.srcport == 8899")
 
-PcapFileEx.stream("capture.pcapng")
+PcapFileEx.stream!("capture.pcapng")
 |> PcapFileEx.DisplayFilter.run(filter)
 |> Enum.take(5)
 
@@ -783,7 +802,7 @@ decoded = packet.decoded[:my_proto]
 decoded = PcapFileEx.Packet.decode_registered!(packet)
 
 # Use the fields in display filters
-PcapFileEx.stream("capture.pcapng")
+PcapFileEx.stream!("capture.pcapng")
 |> Enum.map(&PcapFileEx.Packet.attach_decoded/1)
 |> PcapFileEx.DisplayFilter.filter("myproto.value >= 25")
 |> Enum.to_list()
@@ -969,13 +988,15 @@ Streaming allows processing of arbitrarily large PCAP files with minimal memory 
 
 ```elixir
 # Process a 10GB file with constant memory usage
-PcapFileEx.stream("huge_10gb.pcap")
+PcapFileEx.stream!("huge_10gb.pcap")
 |> Stream.filter(&interesting?/1)
 |> Stream.map(&analyze/1)
 |> Enum.take(1000)
 ```
 
 ## Roadmap
+
+### Completed Features
 
 - [x] PCAP format reading
 - [x] PCAPNG format reading
@@ -987,8 +1008,17 @@ PcapFileEx.stream("huge_10gb.pcap")
 - [x] File validation
 - [x] Comprehensive tests (303 tests: 193 example-based, 94 property-based, 16 doctests)
 - [x] Property-based testing with StreamData for edge case coverage
-- [ ] Packet writing capabilities
-- [ ] Protocol parsing helpers (Ethernet, IP, TCP, etc.)
+- [x] High-performance pre-filtering in Rust layer
+- [x] HTTP/DNS protocol decoding
+- [x] Nanosecond timestamp precision support
+
+### Planned Features
+
+- [ ] **PCAP writer/trimming API** - Export filtered packets back to PCAP/PCAPNG format for sharing or regression testing
+- [ ] **Multi-file timeline merge** - Merge multiple captures by timestamp_precise, useful for correlating outputs from multiple network taps
+- [ ] **Display filter → PreFilter compiler** - Convert Wireshark-style display filters into PreFilter tuples for familiar syntax
+- [ ] **Telemetry hooks** - Emit `:telemetry` events for packet decode, HTTP parsing, and PreFilter hits for observability
+- [ ] **Higher-level protocol decoders** - TLS, DNS (enhanced), HTTP/2 decoders as optional dependencies
 
 ## Troubleshooting
 

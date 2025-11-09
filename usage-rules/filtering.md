@@ -142,7 +142,7 @@ PreFilter.all([
   PreFilter.protocol("tcp"),
   PreFilter.port_dest(443)
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(100)
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.take(100)
 PcapFileEx.Pcap.close(reader)
 
 # Example 2: Internal network traffic
@@ -150,7 +150,7 @@ PcapFileEx.Pcap.close(reader)
 :ok = PcapFileEx.Pcap.set_filter(reader, [
   PreFilter.ip_source_cidr("10.0.0.0/8")
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 PcapFileEx.Pcap.close(reader)
 
 # Example 3: Web traffic (HTTP or HTTPS)
@@ -162,16 +162,16 @@ PcapFileEx.Pcap.close(reader)
     PreFilter.port_dest(443)
   ])
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 PcapFileEx.Pcap.close(reader)
 
 # Example 4: Clearing filter
 {:ok, reader} = PcapFileEx.open("capture.pcap")
 :ok = PcapFileEx.Pcap.set_filter(reader, [PreFilter.protocol("tcp")])
-tcp_packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(100)
+tcp_packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.take(100)
 
 :ok = PcapFileEx.Pcap.clear_filter(reader)  # Back to all packets
-all_packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(100)
+all_packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.take(100)
 PcapFileEx.Pcap.close(reader)
 ```
 
@@ -190,12 +190,12 @@ PcapFileEx.Pcap.close(reader)
 
 ```elixir
 # Filter by single protocol
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_protocol(:tcp)
 |> Enum.to_list()
 
 # Filter by multiple protocols
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_protocol([:tcp, :udp])
 |> Enum.to_list()
 ```
@@ -204,17 +204,17 @@ PcapFileEx.stream("capture.pcap")
 
 ```elixir
 # Exact size
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_size(1500)
 |> Enum.to_list()
 
 # Size range
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_size(100..1500)
 |> Enum.to_list()
 
 # Minimum size
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_size(1000..)
 |> Enum.to_list()
 ```
@@ -225,7 +225,7 @@ PcapFileEx.stream("capture.pcap")
 start_time = ~U[2025-01-01 00:00:00Z]
 end_time = ~U[2025-01-02 00:00:00Z]
 
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_time_range(start_time, end_time)
 |> Enum.to_list()
 ```
@@ -235,19 +235,19 @@ PcapFileEx.stream("capture.pcap")
 ```elixir
 # By source endpoint
 endpoint = %PcapFileEx.Endpoint{ip: "192.168.1.1", port: 8080}
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_source(endpoint)
 |> Enum.to_list()
 
 # By destination endpoint
 endpoint = %PcapFileEx.Endpoint{ip: "10.0.0.1", port: 80}
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_destination(endpoint)
 |> Enum.to_list()
 
 # By either source or destination
 endpoint = %PcapFileEx.Endpoint{ip: "192.168.1.1", port: nil}
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_endpoint(endpoint)
 |> Enum.to_list()
 ```
@@ -256,7 +256,7 @@ PcapFileEx.stream("capture.pcap")
 
 ```elixir
 # Custom predicate function
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.matching(fn packet ->
   # Any custom logic
   :http in packet.protocols and
@@ -271,7 +271,7 @@ end)
 
 ```elixir
 # Combine multiple filters
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_protocol(:tcp)
 |> PcapFileEx.Filter.by_size(100..1500)
 |> PcapFileEx.Filter.by_time_range(start_time, end_time)
@@ -285,14 +285,14 @@ end)
 
 ```elixir
 # Example 1: Large HTTP packets
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_protocol(:http)
 |> PcapFileEx.Filter.by_size(1000..)
 |> Enum.to_list()
 
 # Example 2: Traffic to specific server during business hours
 server = %PcapFileEx.Endpoint{ip: "10.0.0.1", port: nil}
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_destination(server)
 |> PcapFileEx.Filter.matching(fn p ->
   p.timestamp.hour >= 9 and p.timestamp.hour <= 17
@@ -300,7 +300,7 @@ end)
 |> Enum.to_list()
 
 # Example 3: Complex application logic
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.matching(fn packet ->
   cond do
     :http in packet.protocols ->
@@ -405,23 +405,23 @@ frame.time       Packet timestamp
 
 ```elixir
 # Example 1: Simple inline filter
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("tcp.dstport == 80")
 |> Enum.to_list()
 
 # Example 2: Compiled filter (reuse)
 {:ok, filter} = PcapFileEx.DisplayFilter.compile("ip.src == 192.168.1.1 && tcp.dstport == 443")
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.run(filter)
 |> Enum.to_list()
 
 # Example 3: HTTP GET requests
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("http.request.method == \"GET\"")
 |> Enum.to_list()
 
 # Example 4: Complex expression
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("""
   (ip.src == 192.168.1.1 || ip.dst == 192.168.1.1) &&
   (tcp.dstport == 80 || tcp.dstport == 443) &&
@@ -430,12 +430,12 @@ packets = PcapFileEx.stream("capture.pcap")
 |> Enum.to_list()
 
 # Example 5: HTTP responses with errors
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("http.response.code >= 400")
 |> Enum.to_list()
 
 # Example 6: SYN packets
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("tcp.flags.syn == true && tcp.flags.ack == false")
 |> Enum.to_list()
 ```
@@ -455,7 +455,7 @@ Find all HTTPS traffic from 192.168.1.0/24:
   PreFilter.port_dest(443),
   PreFilter.ip_source_cidr("192.168.1.0/24")
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 PcapFileEx.Pcap.close(reader)
 ```
 
@@ -463,7 +463,7 @@ PcapFileEx.Pcap.close(reader)
 
 ```elixir
 source_endpoint = %PcapFileEx.Endpoint{ip: "192.168.1.0/24", port: nil}
-packets = PcapFileEx.stream("large.pcap")
+packets = PcapFileEx.stream!("large.pcap")
 |> PcapFileEx.Filter.by_protocol(:tcp)
 |> PcapFileEx.Filter.matching(fn p ->
   p.dst.port == 443 and ip_in_cidr?(p.src.ip, "192.168.1.0/24")
@@ -474,7 +474,7 @@ end)
 #### Method 3: DisplayFilter (Wireshark syntax)
 
 ```elixir
-packets = PcapFileEx.stream("large.pcap")
+packets = PcapFileEx.stream!("large.pcap")
 |> PcapFileEx.DisplayFilter.filter("""
   tcp.dstport == 443 &&
   ip.src >= 192.168.1.0 &&
@@ -498,7 +498,7 @@ Combine PreFilter (fast) with Elixir Filter (flexible):
 ])
 
 # Stage 2: Elixir Filter for complex logic (on remaining 10%)
-packets = PcapFileEx.Stream.from_reader(reader)
+packets = PcapFileEx.Stream.from_reader!(reader)
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].method == "POST" and
@@ -513,7 +513,7 @@ PcapFileEx.Pcap.close(reader)
 
 ```elixir
 # Different filters based on packet type
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn packet ->
   cond do
     :http in packet.protocols ->
@@ -540,7 +540,7 @@ end)
 # Track TCP connections, filter by connection state
 connections = %{}
 
-packets = PcapFileEx.stream("capture.pcap")
+packets = PcapFileEx.stream!("capture.pcap")
 |> Enum.reduce([], fn packet, acc ->
   if :tcp in packet.protocols do
     conn_key = {packet.src, packet.dst}
@@ -565,14 +565,14 @@ end)
 
 ```elixir
 # Keep every Nth packet
-packets = PcapFileEx.stream("huge.pcap")
+packets = PcapFileEx.stream!("huge.pcap")
 |> Stream.with_index()
 |> Stream.filter(fn {_packet, index} -> rem(index, 100) == 0 end)
 |> Stream.map(fn {packet, _index} -> packet end)
 |> Enum.to_list()
 
 # Random sampling (10%)
-packets = PcapFileEx.stream("huge.pcap")
+packets = PcapFileEx.stream!("huge.pcap")
 |> Stream.filter(fn _packet -> :rand.uniform() < 0.1 end)
 |> Enum.to_list()
 ```
@@ -594,7 +594,7 @@ packets = PcapFileEx.stream("huge.pcap")
 
 ```elixir
 # DON'T: Use Elixir filter on 10GB file for simple query
-PcapFileEx.stream("10gb.pcap")
+PcapFileEx.stream!("10gb.pcap")
 |> Stream.filter(fn p -> :tcp in p.protocols and p.dst.port == 443 end)
 |> Enum.take(10)  # Takes 2 minutes!
 
@@ -640,7 +640,7 @@ end
 ])
 
 # DO: Use Elixir filter or no filter at all
-packets = PcapFileEx.stream("file.pcap")
+packets = PcapFileEx.stream!("file.pcap")
 |> Stream.filter(fn p -> p.protocol in [:tcp, :udp] end)
 |> Enum.to_list()
 ```

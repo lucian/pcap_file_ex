@@ -1,8 +1,33 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2025-11-09
+
+⚠️ **BREAKING CHANGES** - Stream API now follows Elixir conventions
 
 ### Added
+- **Safe Stream API** - New tuple-returning functions following Elixir conventions
+  - `PcapFileEx.stream/1` and `stream/2` now return `{:ok, stream} | {:error, reason}` instead of raising
+  - `PcapFileEx.Stream.packets/1` now returns `{:ok, stream} | {:error, reason}`
+  - `PcapFileEx.Stream.from_reader/1` now returns `{:ok, stream}` for consistency
+  - Added bang variants for convenience (old behavior):
+    - `stream!/1`, `stream!/2` - raises on error
+    - `Stream.packets!/1` - raises on error
+    - `Stream.from_reader!/1` - raises on error
+  - Comprehensive migration guide in module documentation
+- **Unified Format Detection** - New `PcapFileEx.Format` module
+  - Single source of truth for PCAP/PCAPNG format detection
+  - Eliminates 70+ lines of duplicate code between `PcapFileEx` and `PcapFileEx.Validator`
+  - `Format.detect/1` function for file format detection
+- **CI Version Synchronization** - Prevents version drift
+  - New CI job verifies `mix.exs` and `Cargo.toml` versions match
+  - Rejects `-dev` suffix on release tags to prevent accidental dev releases
+  - Ensures Elixir and Rust packages stay synchronized
+- **CONTRIBUTING.md** - Contributor onboarding guide
+  - Development setup instructions (Elixir, Rust, Git)
+  - Tidewave MCP integration guide for development
+  - Rust development workflow (linting, formatting, testing)
+  - Testing guidelines (example-based and property-based)
+  - Code quality standards and PR guidelines
 - **Tidewave MCP Integration** for enhanced development experience
   - Live code evaluation in project context via `mcp__tidewave__project_eval`
   - Module/function documentation access via `mcp__tidewave__get_docs`
@@ -33,12 +58,38 @@
   - See `test/property_test/` for 5 test files and `test/support/generators.ex` for reusable generators
 
 ### Changed
-- improved documentation
+- **BREAKING**: `PcapFileEx.stream/1` and `stream/2` signature changed from returning `Enumerable.t()` to `{:ok, Enumerable.t()} | {:error, String.t()}`
+- **BREAKING**: `PcapFileEx.Stream.packets/1` now returns `{:ok, stream} | {:error, reason}`
+- **BREAKING**: `PcapFileEx.Stream.from_reader/1` now returns `{:ok, stream}` instead of bare stream
+- **Error Handling**: `Pcap.read_all/1` and `PcapNg.read_all/1` now return `{:error, reason}` on packet parsing errors instead of silently dropping errors
+  - Prevents corrupted files or decoder regressions from appearing as "short captures"
+  - Properly closes file handles even on error
+- **CI Improvements**:
+  - Fixed formatter condition to use `startsWith(matrix.elixir_version, '1.19')` - formatter now actually runs!
+  - Removed duplicate `rust-ci.yml` workflow (Rust linting consolidated in main CI)
+- **Documentation Updates**:
+  - All README.md examples updated to v0.2.0 API (shows both safe and bang patterns)
+  - All usage-rules documentation updated (~90 code blocks across 6 files)
+  - Comprehensive migration guide in stream module documentation
+- **Roadmap Reorganized** in README.md:
+  - Split into "Completed Features" and "Planned Features" sections
+  - Added 5 new planned features from CODEX review
+- Improved documentation
 - Updated `PcapFileEx.Packet` struct to include `timestamp_precise` field
 - Modified timestamp conversion to preserve nanosecond precision when possible
 - Added `test/support` to elixirc_paths for test environment (supports property test generators)
+- Version bumped to 0.2.0 in both `mix.exs` and `native/pcap_file_ex/Cargo.toml`
 
 ### Fixed
+- **Format Detection**: Eliminated duplicate magic number detection logic
+  - Previously duplicated between `PcapFileEx` and `PcapFileEx.Validator`
+  - Now uses single `PcapFileEx.Format.detect/1` function
+- **CI Formatter**: Formatter check was never running due to incorrect version match (`'1.19'` vs `'1.19.1'`)
+- **Error Propagation**: Packet parsing errors in `read_all/1` are now properly surfaced instead of being silently dropped
+- **Stats Module**: Updated to use `stream!/1` to maintain backward compatibility in internal calls
+
+### Removed
+- Duplicate `.github/workflows/rust-ci.yml` - Rust linting now handled exclusively in main CI workflow
 
 ## [0.1.5] - 2025-11-08
 

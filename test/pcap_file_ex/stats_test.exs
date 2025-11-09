@@ -171,7 +171,7 @@ defmodule PcapFileEx.StatsTest do
     test "works with stream input (not just path)" do
       # Create stream and compute stats
       stats =
-        PcapFileEx.stream(@test_pcap_file)
+        PcapFileEx.stream!(@test_pcap_file)
         |> Stats.compute_streaming()
 
       assert stats.packet_count > 0
@@ -182,13 +182,13 @@ defmodule PcapFileEx.StatsTest do
     test "works with filtered stream", %{pcap_count: total_count} do
       # Get all TCP packets
       all_tcp_count =
-        PcapFileEx.stream(@test_pcap_file)
+        PcapFileEx.stream!(@test_pcap_file)
         |> Enum.filter(fn packet -> :tcp in packet.protocols end)
         |> length()
 
       # Compute stats only for TCP packets
       tcp_stats =
-        PcapFileEx.stream(@test_pcap_file)
+        PcapFileEx.stream!(@test_pcap_file)
         |> Stream.filter(fn packet -> :tcp in packet.protocols end)
         |> Stats.compute_streaming()
 
@@ -216,7 +216,7 @@ defmodule PcapFileEx.StatsTest do
       # This test verifies streaming works by taking only first N packets
       # If it loaded all into memory, this would be slow for large files
       stats =
-        PcapFileEx.stream(@test_pcap_file)
+        PcapFileEx.stream!(@test_pcap_file)
         |> Stream.take(5)
         |> Stats.compute_streaming()
 
@@ -227,7 +227,7 @@ defmodule PcapFileEx.StatsTest do
     test "can be chained with other stream operations" do
       # Complex streaming pipeline
       stats =
-        PcapFileEx.stream(@test_pcap_file)
+        PcapFileEx.stream!(@test_pcap_file)
         |> Stream.filter(fn packet -> byte_size(packet.data) > 50 end)
         |> Stream.take(10)
         |> Stats.compute_streaming()

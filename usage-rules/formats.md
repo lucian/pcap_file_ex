@@ -25,7 +25,7 @@ Understanding the differences between PCAP and PCAPNG formats and when to use fo
 # ✅ ALWAYS: Use auto-detection
 {:ok, reader} = PcapFileEx.open("capture.pcap")  # Works for both formats
 {:ok, packets} = PcapFileEx.read_all("capture.pcap")
-PcapFileEx.stream("capture.pcap") |> Enum.to_list()
+PcapFileEx.stream!("capture.pcap") |> Enum.to_list()
 
 # ❌ AVOID: Assume format from extension
 {:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")  # Fails if PCAPNG!
@@ -168,8 +168,8 @@ packet.timestamp  # ~U[2025-01-01 12:00:00.123456Z]
 
 ```elixir
 # ✅ WORKS: Auto-detection handles both formats
-linux_packets = PcapFileEx.stream("linux_capture.pcapng") |> Enum.to_list()
-macos_packets = PcapFileEx.stream("macos_capture.pcap") |> Enum.to_list()
+linux_packets = PcapFileEx.stream!("linux_capture.pcapng") |> Enum.to_list()
+macos_packets = PcapFileEx.stream!("macos_capture.pcap") |> Enum.to_list()
 
 # Timestamps are normalized to DateTime
 linux_packets |> Enum.each(fn p -> IO.inspect(p.timestamp) end)
@@ -245,14 +245,14 @@ pcap_packet.interface     # nil
 
 ```elixir
 # Only packets from specific interface (PCAPNG only)
-PcapFileEx.stream("capture.pcapng")
+PcapFileEx.stream!("capture.pcapng")
 |> Stream.filter(fn packet ->
   packet.interface_id == 0
 end)
 |> Enum.to_list()
 
 # Guard against PCAP files
-PcapFileEx.stream("unknown.pcap")
+PcapFileEx.stream!("unknown.pcap")
 |> Stream.filter(fn packet ->
   packet.interface_id == 0 or is_nil(packet.interface_id)
 end)
@@ -332,7 +332,7 @@ defmodule CaptureAnalyzer do
 
   defp analyze_with_auto_detection(file) do
     # Works for both formats
-    PcapFileEx.stream(file) |> Enum.count()
+    PcapFileEx.stream!(file) |> Enum.count()
   end
 
   defp analyze_with_interfaces(file) do
@@ -344,7 +344,7 @@ defmodule CaptureAnalyzer do
       _ -> []
     end
 
-    count = PcapFileEx.Stream.from_reader(reader) |> Enum.count()
+    count = PcapFileEx.Stream.from_reader!(reader) |> Enum.count()
     PcapFileEx.Pcap.close(reader)  # Works for both
 
     {count, length(interfaces)}

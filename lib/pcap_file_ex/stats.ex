@@ -57,7 +57,7 @@ defmodule PcapFileEx.Stats do
 
       # From stream (can be combined with filtering)
       stats =
-        PcapFileEx.stream("capture.pcap")
+        PcapFileEx.stream!("capture.pcap")
         |> PcapFileEx.Filter.by_protocol(:tcp)
         |> PcapFileEx.Stats.compute_streaming()
 
@@ -67,7 +67,7 @@ defmodule PcapFileEx.Stats do
   def compute_streaming(path) when is_binary(path) do
     try do
       stats =
-        PcapFileEx.stream(path)
+        PcapFileEx.stream!(path)
         |> compute_streaming()
 
       {:ok, stats}
@@ -147,7 +147,7 @@ defmodule PcapFileEx.Stats do
   def packet_count(path) when is_binary(path) do
     try do
       count =
-        PcapFileEx.stream(path)
+        PcapFileEx.stream!(path)
         |> Enum.count()
 
       {:ok, count}
@@ -168,7 +168,7 @@ defmodule PcapFileEx.Stats do
   def total_bytes(path) when is_binary(path) do
     try do
       bytes =
-        PcapFileEx.stream(path)
+        PcapFileEx.stream!(path)
         |> Enum.reduce(0, fn packet, acc ->
           acc + byte_size(packet.data)
         end)

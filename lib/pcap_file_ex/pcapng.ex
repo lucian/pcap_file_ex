@@ -115,6 +115,9 @@ defmodule PcapFileEx.PcapNg do
 
   This loads all packets into memory, so be careful with large files.
 
+  Returns `{:ok, packets}` on success or `{:error, reason}` if a packet
+  fails to parse. On error, the file is still properly closed.
+
   ## Examples
 
       {:ok, packets} = PcapFileEx.PcapNg.read_all("capture.pcapng")
@@ -122,10 +125,18 @@ defmodule PcapFileEx.PcapNg do
   """
   @spec read_all(Path.t()) :: {:ok, [Packet.t()]} | {:error, String.t()}
   def read_all(path) do
-    with {:ok, reader} <- open(path) do
-      packets = read_all_packets(reader, [])
-      close(reader)
-      {:ok, Enum.reverse(packets)}
+    case open(path) do
+      {:ok, reader} ->
+        result = read_all_packets(reader, [])
+        close(reader)
+
+        case result do
+          {:ok, packets} -> {:ok, Enum.reverse(packets)}
+          {:error, _reason} = error -> error
+        end
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
@@ -149,8 +160,8 @@ defmodule PcapFileEx.PcapNg do
   defp read_all_packets(reader, acc) do
     case next_packet(reader) do
       {:ok, packet} -> read_all_packets(reader, [packet | acc])
-      :eof -> acc
-      {:error, _} -> acc
+      :eof -> {:ok, acc}
+      {:error, reason} -> {:error, reason}
     end
   end
 end

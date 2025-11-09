@@ -19,7 +19,7 @@ IO.puts("Protocols in first packet: #{inspect(hd(packets).protocols)}")
 
 ```elixir
 # Process large file with constant memory
-packet_count = PcapFileEx.stream("large_capture.pcap")
+packet_count = PcapFileEx.stream!("large_capture.pcap")
 |> Enum.count()
 
 IO.puts("Total packets: #{packet_count}")
@@ -125,7 +125,7 @@ defmodule FastQuery do
         PreFilter.ip_dest(target_ip)
       ])
 
-      packets = PcapFileEx.Stream.from_reader(reader)
+      packets = PcapFileEx.Stream.from_reader!(reader)
       |> Enum.take(100)
 
       IO.puts("Found #{length(packets)} HTTPS packets to #{target_ip}")
@@ -303,7 +303,7 @@ end)
 ```elixir
 defmodule ConnectionTracker do
   def track_connections(file_path) do
-    PcapFileEx.stream(file_path)
+    PcapFileEx.stream!(file_path)
     |> Stream.filter(fn p -> :tcp in p.protocols end)
     |> Enum.reduce(%{}, fn packet, connections ->
       conn_key = connection_key(packet)
@@ -363,7 +363,7 @@ end)
 ```elixir
 defmodule BandwidthAnalyzer do
   def analyze_by_second(file_path) do
-    PcapFileEx.stream(file_path)
+    PcapFileEx.stream!(file_path)
     |> Enum.reduce(%{}, fn packet, acc ->
       # Truncate to second
       second = %{packet.timestamp | microsecond: {0, 6}}
@@ -407,7 +407,7 @@ BandwidthAnalyzer.find_peak_usage("network_capture.pcap")
 ```elixir
 defmodule DNSAnalyzer do
   def analyze_queries(file_path) do
-    PcapFileEx.stream(file_path)
+    PcapFileEx.stream!(file_path)
     |> Stream.filter(fn p -> :dns in p.protocols end)
     |> Enum.reduce(%{queries: [], responses: []}, fn packet, acc ->
       # Simplified - would need actual DNS parsing
@@ -423,7 +423,7 @@ defmodule DNSAnalyzer do
     # Look for queries to suspicious TLDs or patterns
     suspicious_tlds = [".tk", ".ml", ".ga", ".cf", ".gq"]
 
-    PcapFileEx.stream(file_path)
+    PcapFileEx.stream!(file_path)
     |> Stream.filter(fn p -> :dns in p.protocols end)
     |> Stream.filter(fn _packet ->
       # Would check actual DNS query name
@@ -449,7 +449,7 @@ defmodule TLSAnalyzer do
         PreFilter.port_dest(443)
       ])
 
-      PcapFileEx.Stream.from_reader(reader)
+      PcapFileEx.Stream.from_reader!(reader)
       |> Enum.group_by(fn packet ->
         {packet.src, packet.dst}
       end)
@@ -513,7 +513,7 @@ defmodule PcapFilter do
     # Note: This is conceptual - actual PCAP writing would require
     # a writer implementation (not currently in PcapFileEx)
 
-    filtered_packets = PcapFileEx.stream(input_path)
+    filtered_packets = PcapFileEx.stream!(input_path)
     |> Stream.filter(filter_fn)
     |> Enum.to_list()
 
@@ -540,7 +540,7 @@ defmodule RealtimeMonitor do
     # For live capture, you'd use a tail-like pattern
     # This example shows the streaming approach
 
-    PcapFileEx.stream(file_path)
+    PcapFileEx.stream!(file_path)
     |> Stream.each(&process_packet/1)
     |> Stream.run()
   end

@@ -41,19 +41,7 @@ defmodule PcapFileEx do
       {:ok, :pcap} = PcapFileEx.Validator.validate("capture.pcap")
   """
 
-  alias PcapFileEx.{Packet, Pcap, PcapNg, Stream}
-
-  # Magic numbers for file format detection
-  # PCAP - microsecond precision
-  @pcap_magic_le_usec <<0xD4, 0xC3, 0xB2, 0xA1>>
-  @pcap_magic_be_usec <<0xA1, 0xB2, 0xC3, 0xD4>>
-
-  # PCAP - nanosecond precision
-  @pcap_magic_le_nsec <<0x4D, 0x3C, 0xB2, 0xA1>>
-  @pcap_magic_be_nsec <<0xA1, 0xB2, 0x3C, 0x4D>>
-
-  # PCAPNG
-  @pcapng_magic <<0x0A, 0x0D, 0x0D, 0x0A>>
+  alias PcapFileEx.{Format, Packet, Pcap, PcapNg, Stream}
 
   @doc """
   Opens a PCAP or PCAPNG file for reading with automatic format detection.
@@ -73,7 +61,7 @@ defmodule PcapFileEx do
   """
   @spec open(Path.t()) :: {:ok, Pcap.t() | PcapNg.t()} | {:error, String.t()}
   def open(path) when is_binary(path) do
-    case detect_format(path) do
+    case Format.detect(path) do
       :pcap -> Pcap.open(path)
       :pcapng -> PcapNg.open(path)
       {:error, reason} -> {:error, reason}
@@ -95,7 +83,7 @@ defmodule PcapFileEx do
     decode? = Keyword.get(opts, :decode, true)
 
     result =
-      case detect_format(path) do
+      case Format.detect(path) do
         :pcap -> Pcap.read_all(path)
         :pcapng -> PcapNg.read_all(path)
         {:error, reason} -> {:error, reason}
@@ -113,89 +101,116 @@ defmodule PcapFileEx do
   This is memory efficient for large files as packets are read on demand.
   The file is automatically opened and closed.
 
+  Returns `{:ok, stream}` on success or `{:error, reason}` if the file format
+  cannot be detected or the file cannot be opened.
+
+  ## Options
+
+    * `:decode` - If true (default), attaches decoded protocol information to each packet
+
   ## Examples
 
-      PcapFileEx.stream("capture.pcap")
+      {:ok, stream} = PcapFileEx.stream("capture.pcap")
+      stream
       |> Stream.filter(fn packet -> byte_size(packet.data) > 100 end)
       |> Enum.count()
 
-      PcapFileEx.stream("capture.pcapng")
-      |> Stream.take(10)
-      |> Enum.to_list()
+      # Handle errors
+      case PcapFileEx.stream("capture.pcapng") do
+        {:ok, stream} -> stream |> Enum.take(10)
+        {:error, msg} -> IO.puts("Error: \#{msg}")
+      end
+
+  ## Migration from 0.1.x
+
+  In version 0.1.x, this function raised on errors. Use `stream!/2` for the old behavior:
+
+      # Old (0.1.x)
+      stream = PcapFileEx.stream("capture.pcap")
+
+      # New (0.2.0) - option 1: handle errors
+      {:ok, stream} = PcapFileEx.stream("capture.pcap")
+
+      # New (0.2.0) - option 2: use bang variant
+      stream = PcapFileEx.stream!("capture.pcap")
   """
-  @spec stream(Path.t(), keyword()) :: Enumerable.t()
+  @spec stream(Path.t(), keyword()) :: {:ok, Enumerable.t()} | {:error, String.t()}
   def stream(path, opts \\ []) when is_binary(path) do
     decode? = Keyword.get(opts, :decode, true)
 
-    base_stream =
-      case detect_format(path) do
-        :pcap -> Stream.packets(path)
-        :pcapng -> stream_pcapng(path)
-        {:error, reason} -> raise "Failed to detect file format: #{reason}"
-      end
+    with format when format in [:pcap, :pcapng] <- Format.detect(path),
+         {:ok, base_stream} <- get_base_stream(format, path) do
+      stream =
+        if decode? do
+          Elixir.Stream.map(base_stream, &Packet.attach_decoded/1)
+        else
+          base_stream
+        end
 
-    if decode? do
-      Elixir.Stream.map(base_stream, &Packet.attach_decoded/1)
+      {:ok, stream}
     else
-      base_stream
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Creates a lazy stream of packets, raising on errors.
+
+  This is the old behavior from version 0.1.x.
+
+  ## Examples
+
+      PcapFileEx.stream!("capture.pcap")
+      |> Stream.filter(fn packet -> byte_size(packet.data) > 100 end)
+      |> Enum.count()
+  """
+  @spec stream!(Path.t(), keyword()) :: Enumerable.t()
+  def stream!(path, opts \\ []) when is_binary(path) do
+    case stream(path, opts) do
+      {:ok, stream} -> stream
+      {:error, reason} -> raise "Failed to create stream: #{reason}"
     end
   end
 
   # Private functions
 
-  @spec detect_format(Path.t()) :: :pcap | :pcapng | {:error, String.t()}
-  defp detect_format(path) do
-    case File.open(path, [:read, :binary]) do
-      {:ok, file} ->
-        result =
-          case IO.binread(file, 4) do
-            @pcap_magic_le_usec ->
-              :pcap
+  defp get_base_stream(:pcap, path) do
+    Stream.packets(path)
+  end
 
-            @pcap_magic_be_usec ->
-              :pcap
-
-            @pcap_magic_le_nsec ->
-              :pcap
-
-            @pcap_magic_be_nsec ->
-              :pcap
-
-            @pcapng_magic ->
-              :pcapng
-
-            magic when is_binary(magic) ->
-              {:error, "Unknown file format (magic: #{inspect(magic)})"}
-
-            :eof ->
-              {:error, "File is empty"}
-          end
-
-        File.close(file)
-        result
-
-      {:error, reason} ->
-        {:error, "Cannot open file: #{:file.format_error(reason)}"}
-    end
+  defp get_base_stream(:pcapng, path) do
+    stream_pcapng(path)
   end
 
   defp stream_pcapng(path) do
-    Elixir.Stream.resource(
-      fn ->
-        case PcapNg.open(path) do
-          {:ok, reader} -> reader
-          {:error, reason} -> raise "Failed to open PCAPNG file: #{reason}"
-        end
-      end,
-      fn reader ->
-        case PcapNg.next_packet(reader) do
-          {:ok, packet} -> {[packet], reader}
-          :eof -> {:halt, reader}
-          {:error, reason} -> raise "Error reading packet: #{reason}"
-        end
-      end,
-      fn reader -> PcapNg.close(reader) end
-    )
+    # Pre-validate by attempting to open
+    case PcapNg.open(path) do
+      {:ok, reader} ->
+        PcapNg.close(reader)
+
+        stream =
+          Elixir.Stream.resource(
+            fn ->
+              case PcapNg.open(path) do
+                {:ok, reader} -> reader
+                {:error, reason} -> raise "Failed to open PCAPNG file: #{reason}"
+              end
+            end,
+            fn reader ->
+              case PcapNg.next_packet(reader) do
+                {:ok, packet} -> {[packet], reader}
+                :eof -> {:halt, reader}
+                {:error, reason} -> raise "Error reading packet: #{reason}"
+              end
+            end,
+            fn reader -> PcapNg.close(reader) end
+          )
+
+        {:ok, stream}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp maybe_attach_decoded(packets, true), do: Enum.map(packets, &Packet.attach_decoded/1)

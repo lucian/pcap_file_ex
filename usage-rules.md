@@ -24,7 +24,7 @@ This guide helps AI coding assistants generate correct, performant PcapFileEx co
 {:ok, packets} = PcapFileEx.read_all("small.pcap")
 
 # Large files (>100MB) - stream lazily
-PcapFileEx.stream("large.pcap")
+PcapFileEx.stream!("large.pcap")
 |> Stream.filter(fn p -> :http in p.protocols end)
 |> Enum.take(100)
 
@@ -34,7 +34,7 @@ PcapFileEx.stream("large.pcap")
   PreFilter.protocol("tcp"),
   PreFilter.port_dest(80)
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(10)
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.take(10)
 PcapFileEx.Pcap.close(reader)
 ```
 
@@ -42,7 +42,7 @@ PcapFileEx.Pcap.close(reader)
 
 ✅ **Automatic (recommended) - no manual cleanup:**
 ```elixir
-PcapFileEx.stream("file.pcap") |> Enum.to_list()
+PcapFileEx.stream!("file.pcap") |> Enum.to_list()
 ```
 
 ✅ **Manual - MUST close when done:**
@@ -50,7 +50,7 @@ PcapFileEx.stream("file.pcap") |> Enum.to_list()
 {:ok, reader} = PcapFileEx.open("file.pcap")
 try do
   # Use reader
-  packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+  packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 after
   PcapFileEx.Pcap.close(reader)  # or PcapNg.close(reader)
 end
@@ -82,16 +82,16 @@ end
 ```elixir
 # DON'T: Open without closing (resource leak!)
 {:ok, reader} = PcapFileEx.open("file.pcap")
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 # Reader never closed!
 
 # DO: Use streaming (auto-closes)
-packets = PcapFileEx.stream("file.pcap") |> Enum.to_list()
+packets = PcapFileEx.stream!("file.pcap") |> Enum.to_list()
 
 # OR: Explicitly close
 {:ok, reader} = PcapFileEx.open("file.pcap")
 try do
-  packets = PcapFileEx.Stream.from_reader(reader) |> Enum.to_list()
+  packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.to_list()
 after
   PcapFileEx.Pcap.close(reader)
 end
@@ -101,7 +101,7 @@ end
 
 ```elixir
 # DON'T: Filter 10GB file in Elixir (VERY SLOW!)
-PcapFileEx.stream("huge_10gb.pcap")
+PcapFileEx.stream!("huge_10gb.pcap")
 |> Stream.filter(fn p -> :tcp in p.protocols and p.dst.port == 80 end)
 |> Enum.take(10)
 
@@ -111,7 +111,7 @@ PcapFileEx.stream("huge_10gb.pcap")
   PreFilter.protocol("tcp"),
   PreFilter.port_dest(80)
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(10)
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.take(10)
 PcapFileEx.Pcap.close(reader)
 ```
 
@@ -158,7 +158,7 @@ end
 packet = PcapFileEx.Pcap.next_packet(reader, decode: false)  # NO SUCH OPTION!
 
 # DO: Disable at stream/read_all level
-packets = PcapFileEx.stream("file.pcap", decode: false) |> Enum.to_list()
+packets = PcapFileEx.stream!("file.pcap", decode: false) |> Enum.to_list()
 {:ok, packets} = PcapFileEx.read_all("file.pcap", decode: false)
 ```
 
@@ -171,7 +171,7 @@ packets = PcapFileEx.stream("file.pcap", decode: false) |> Enum.to_list()
 {:ok, packets} = PcapFileEx.read_all("capture.pcap")
 
 # Stream for large files
-PcapFileEx.stream("large.pcap")
+PcapFileEx.stream!("large.pcap")
 |> Stream.filter(fn packet -> byte_size(packet.data) > 1000 end)
 |> Enum.take(100)
 
@@ -196,7 +196,7 @@ PcapFileEx.Pcap.close(reader)
   PreFilter.protocol("tcp"),
   PreFilter.port_dest(443)
 ])
-packets = PcapFileEx.Stream.from_reader(reader) |> Enum.take(10)
+packets = PcapFileEx.Stream.from_reader!(reader) |> Enum.take(10)
 PcapFileEx.Pcap.close(reader)
 
 # Multiple criteria with OR
@@ -223,7 +223,7 @@ PcapFileEx.Pcap.close(reader)
 - Need to check decoded payloads
 
 ```elixir
-PcapFileEx.stream("capture.pcap")
+PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_protocol(:http)
 |> PcapFileEx.Filter.by_size(100..1500)
 |> PcapFileEx.Filter.by_time_range(start_time, end_time)
@@ -239,12 +239,12 @@ end)
 ```elixir
 # Compile once, reuse multiple times
 {:ok, filter} = PcapFileEx.DisplayFilter.compile("tcp.dstport == 80 && ip.src == 192.168.1.1")
-packets = PcapFileEx.stream("file.pcap")
+packets = PcapFileEx.stream!("file.pcap")
 |> PcapFileEx.DisplayFilter.run(filter)
 |> Enum.to_list()
 
 # Or inline (compiles on each use)
-PcapFileEx.stream("file.pcap")
+PcapFileEx.stream!("file.pcap")
 |> PcapFileEx.DisplayFilter.filter("http.request.method == \"GET\"")
 |> Enum.to_list()
 ```
@@ -287,7 +287,7 @@ IO.inspect(stats.protocols)  # %{tcp: 100, udp: 50, ...}
 {:ok, stats} = PcapFileEx.Stats.compute_streaming("huge.pcap")
 
 # With filtering
-tcp_stats = PcapFileEx.stream("capture.pcap")
+tcp_stats = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_protocol(:tcp)
 |> PcapFileEx.Stats.compute_from_stream()
 ```
@@ -301,16 +301,16 @@ tcp_stats = PcapFileEx.stream("capture.pcap")
 
 ```elixir
 # Count packets without decoding overhead
-packet_count = PcapFileEx.stream("large.pcap", decode: false)
+packet_count = PcapFileEx.stream!("large.pcap", decode: false)
 |> Enum.count()
 
 # Sum packet sizes
-total_bytes = PcapFileEx.stream("large.pcap", decode: false)
+total_bytes = PcapFileEx.stream!("large.pcap", decode: false)
 |> Stream.map(&byte_size(&1.data))
 |> Enum.sum()
 
 # Find largest packet
-largest = PcapFileEx.stream("large.pcap", decode: false)
+largest = PcapFileEx.stream!("large.pcap", decode: false)
 |> Enum.max_by(&byte_size(&1.data))
 ```
 
@@ -495,7 +495,7 @@ start_ts = PcapFileEx.Timestamp.new(1731065049, 735000000)
 end_ts = PcapFileEx.Timestamp.new(1731065049, 736000000)
 
 packets_in_window =
-  PcapFileEx.stream("capture.pcapng")
+  PcapFileEx.stream!("capture.pcapng")
   |> Stream.filter(fn p ->
     PcapFileEx.Timestamp.compare(p.timestamp_precise, start_ts) != :lt and
     PcapFileEx.Timestamp.compare(p.timestamp_precise, end_ts) != :gt

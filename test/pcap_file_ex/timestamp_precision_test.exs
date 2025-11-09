@@ -94,7 +94,7 @@ defmodule PcapFileEx.TimestampPrecisionTest do
     @tag :pcap_nanosecond
     test "can stream nanosecond PCAP file" do
       packet_count =
-        PcapFileEx.stream("test/fixtures/linux_new_test.pcap")
+        PcapFileEx.stream!("test/fixtures/linux_new_test.pcap")
         |> Enum.count()
 
       assert packet_count > 0

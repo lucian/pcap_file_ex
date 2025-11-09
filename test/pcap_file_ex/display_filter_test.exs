@@ -9,7 +9,7 @@ defmodule PcapFileEx.DisplayFilterTest do
     ensure_fixture(@pcapng)
 
     packets =
-      PcapFileEx.stream(@pcapng)
+      PcapFileEx.stream!(@pcapng)
       |> Enum.map(&Packet.attach_decoded/1)
 
     filtered =
@@ -31,7 +31,7 @@ defmodule PcapFileEx.DisplayFilterTest do
     ensure_fixture(@pcapng)
 
     [packet | _] =
-      PcapFileEx.stream(@pcapng)
+      PcapFileEx.stream!(@pcapng)
       |> Enum.map(&Packet.attach_decoded/1)
       |> DisplayFilter.filter("tcp.srcport > 0 && ip.src == 127.0.0.1")
       |> Enum.to_list()

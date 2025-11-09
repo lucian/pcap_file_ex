@@ -118,17 +118,17 @@ http.body          # Raw bytes
 
 ```elixir
 # Method 1: Filter module
-http_packets = PcapFileEx.stream("capture.pcap")
+http_packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Filter.by_protocol(:http)
 |> Enum.to_list()
 
 # Method 2: DisplayFilter
-http_packets = PcapFileEx.stream("capture.pcap")
+http_packets = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("http")
 |> Enum.to_list()
 
 # Method 3: Manual filtering
-http_packets = PcapFileEx.stream("capture.pcap")
+http_packets = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p -> :http in p.protocols end)
 |> Enum.to_list()
 ```
@@ -137,7 +137,7 @@ http_packets = PcapFileEx.stream("capture.pcap")
 
 ```elixir
 # GET requests
-get_requests = PcapFileEx.stream("capture.pcap")
+get_requests = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].method == "GET"
@@ -145,7 +145,7 @@ end)
 |> Enum.to_list()
 
 # POST/PUT/DELETE (modifying requests)
-modifying_requests = PcapFileEx.stream("capture.pcap")
+modifying_requests = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].method in ["POST", "PUT", "DELETE"]
@@ -153,7 +153,7 @@ end)
 |> Enum.to_list()
 
 # DisplayFilter syntax
-post_requests = PcapFileEx.stream("capture.pcap")
+post_requests = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("http.request.method == \"POST\"")
 |> Enum.to_list()
 ```
@@ -162,7 +162,7 @@ post_requests = PcapFileEx.stream("capture.pcap")
 
 ```elixir
 # API endpoints
-api_requests = PcapFileEx.stream("capture.pcap")
+api_requests = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   String.starts_with?(p.decoded[:http].path || "", "/api/")
@@ -170,7 +170,7 @@ end)
 |> Enum.to_list()
 
 # Specific path
-users_requests = PcapFileEx.stream("capture.pcap")
+users_requests = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].path == "/api/users"
@@ -182,7 +182,7 @@ end)
 
 ```elixir
 # Error responses (4xx, 5xx)
-errors = PcapFileEx.stream("capture.pcap")
+errors = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].status_code >= 400
@@ -190,7 +190,7 @@ end)
 |> Enum.to_list()
 
 # Specific status
-not_found = PcapFileEx.stream("capture.pcap")
+not_found = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].status_code == 404
@@ -198,7 +198,7 @@ end)
 |> Enum.to_list()
 
 # DisplayFilter syntax
-server_errors = PcapFileEx.stream("capture.pcap")
+server_errors = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.DisplayFilter.filter("http.response.code >= 500")
 |> Enum.to_list()
 ```
@@ -207,7 +207,7 @@ server_errors = PcapFileEx.stream("capture.pcap")
 
 ```elixir
 # Requests with specific header
-json_requests = PcapFileEx.stream("capture.pcap")
+json_requests = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   get_in(p.decoded[:http].headers, ["Content-Type"]) =~ "application/json"
@@ -215,7 +215,7 @@ end)
 |> Enum.to_list()
 
 # Requests to specific host
-host_requests = PcapFileEx.stream("capture.pcap")
+host_requests = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   p.decoded[:http].host == "api.example.com"
@@ -234,7 +234,7 @@ Use `PcapFileEx.TCP.stream_http_messages/2` when:
 
 ```elixir
 # Single-packet HTTP (works for small messages)
-http_packets = PcapFileEx.stream("capture.pcap")
+http_packets = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p -> :http in p.protocols end)
 |> Enum.to_list()
 
@@ -398,7 +398,7 @@ end)
 end)
 
 # Find SQL injection attempts
-sqli_attempts = PcapFileEx.stream("capture.pcap")
+sqli_attempts = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   String.contains?(p.decoded[:http].path || "", "' OR '1'='1")
@@ -442,7 +442,7 @@ end
 
 ```elixir
 # Detect path traversal attempts
-traversal_attempts = PcapFileEx.stream("capture.pcap")
+traversal_attempts = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p ->
   :http in p.protocols and
   String.contains?(p.decoded[:http].path || "", "..")
@@ -465,7 +465,7 @@ end)
     PreFilter.port_dest(8080)
   ])
 ])
-http_packets = PcapFileEx.Stream.from_reader(reader)
+http_packets = PcapFileEx.Stream.from_reader!(reader)
 |> Stream.filter(fn p -> :http in p.protocols end)
 |> Enum.to_list()
 PcapFileEx.Pcap.close(reader)
@@ -475,7 +475,7 @@ PcapFileEx.Pcap.close(reader)
 
 ```elixir
 # If you only need HTTP metadata (not body decoding)
-http_metadata = PcapFileEx.stream("capture.pcap", decode: false)
+http_metadata = PcapFileEx.stream!("capture.pcap", decode: false)
 |> Stream.filter(fn p ->
   # Manual protocol detection
   byte_size(p.data) > 4 and
@@ -520,7 +520,7 @@ data = http.decoded_body  # Already a map!
 
 ```elixir
 # DON'T: Only check single packets (misses fragmented HTTP)
-http_count = PcapFileEx.stream("capture.pcap")
+http_count = PcapFileEx.stream!("capture.pcap")
 |> Stream.filter(fn p -> :http in p.protocols end)
 |> Enum.count()  # Undercounts!
 

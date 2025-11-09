@@ -58,7 +58,7 @@ jobs:
 
       - name: Check formatting
         run: mix format --check-formatted
-        if: matrix.elixir_version == '1.19'
+        if: startsWith(matrix.elixir_version, '1.19')
 
   lint:
     runs-on: ubuntu-latest
@@ -92,3 +92,32 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy --manifest-path=native/pcap_file_ex/Cargo.toml -- -Dwarnings
+
+  version-sync:
+    name: Verify version synchronization
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract versions
+        id: versions
+        run: |
+          MIX_VERSION=$(grep '@version' mix.exs | sed 's/.*"\(.*\)".*/\1/')
+          CARGO_VERSION=$(grep '^version' native/pcap_file_ex/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "mix=$MIX_VERSION" >> $GITHUB_OUTPUT
+          echo "cargo=$CARGO_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check versions match
+        run: |
+          if [ "${{ steps.versions.outputs.mix }}" != "${{ steps.versions.outputs.cargo }}" ]; then
+            echo "Version mismatch: mix.exs=${{ steps.versions.outputs.mix }} vs Cargo.toml=${{ steps.versions.outputs.cargo }}"
+            exit 1
+          fi
+
+      - name: Reject -dev suffix on release branches
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [[ "${{ steps.versions.outputs.mix }}" == *"-dev"* ]]; then
+            echo "Cannot release with -dev suffix: ${{ steps.versions.outputs.mix }}"
+            exit 1
+          fi
