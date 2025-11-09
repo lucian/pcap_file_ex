@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1] - 2025-11-09
+
+- improve CI pipeline - add dialyzer, credo, package audit
+- optimize rust NIFs build process
+
 ## [0.2.0] - 2025-11-09
 
 ⚠️ **BREAKING CHANGES** - Stream API now follows Elixir conventions
