@@ -107,9 +107,15 @@ jobs:
           # Strip -dev suffix from mix version for comparison
           MIX_VERSION_BASE=$(echo "${MIX_VERSION}" | sed 's/-dev$//')
           {
-            echo "mix=${MIX_VERSION}"
-            echo "mix_base=${MIX_VERSION_BASE}"
-            echo "cargo=${CARGO_VERSION}"
+            echo "mix<<EOF"
+            echo "${MIX_VERSION}"
+            echo "EOF"
+            echo "mix_base<<EOF"
+            echo "${MIX_VERSION_BASE}"
+            echo "EOF"
+            echo "cargo<<EOF"
+            echo "${CARGO_VERSION}"
+            echo "EOF"
           } >> $GITHUB_OUTPUT
 
       - name: Check versions match
