@@ -39,4 +39,19 @@ defmodule PcapFileEx.Header do
       endianness: map.endianness
     }
   end
+
+  @doc """
+  Converts a Header struct to a map for passing to NIFs.
+  """
+  @spec to_map(t()) :: map()
+  def to_map(%__MODULE__{} = header) do
+    %{
+      version_major: header.version_major,
+      version_minor: header.version_minor,
+      snaplen: header.snaplen,
+      datalink: header.datalink,
+      ts_resolution: header.ts_resolution,
+      endianness: header.endianness
+    }
+  end
 end

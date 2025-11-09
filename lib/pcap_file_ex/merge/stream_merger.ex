@@ -90,6 +90,9 @@ defmodule PcapFileEx.Merge.StreamMerger do
             :pcapng ->
               {:ok, r} = PcapNg.open(path)
               r
+
+            {:error, reason} ->
+              raise "Failed to detect format for #{path}: #{reason}"
           end
 
         %{

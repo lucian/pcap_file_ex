@@ -42,16 +42,26 @@ defmodule PcapFileEx.Merge.Validator do
   @spec validate_datalinks([String.t()]) ::
           {:ok, map()} | {:error, {:no_common_datalink, map()}}
   def validate_datalinks(paths) when is_list(paths) do
+    # Get file info, handling any format detection errors
     files_info =
       paths
       |> Enum.map(&get_file_datalink_info/1)
 
-    # Check if all files are PCAP (simple case)
-    if Enum.all?(files_info, &(&1.format == :pcap)) do
-      validate_pcap_datalinks(files_info)
-    else
-      # At least one PCAPNG file, need full active interface validation
-      validate_pcapng_datalinks(files_info)
+    # Check for any errors from format detection
+    case Enum.find(files_info, &match?({:error, _}, &1)) do
+      {:error, reason} ->
+        # Propagate first error found
+        {:error, reason}
+
+      nil ->
+        # No errors, proceed with validation
+        # Check if all files are PCAP (simple case)
+        if Enum.all?(files_info, &(&1.format == :pcap)) do
+          validate_pcap_datalinks(files_info)
+        else
+          # At least one PCAPNG file, need full active interface validation
+          validate_pcapng_datalinks(files_info)
+        end
     end
   end
 
@@ -157,8 +167,9 @@ defmodule PcapFileEx.Merge.Validator do
           active_interfaces: active_interfaces
         }
 
-      _ ->
-        %{path: path, format: :unknown, datalink: nil, active_interfaces: nil}
+      {:error, reason} ->
+        # Propagate format detection errors properly
+        {:error, "Cannot detect format for #{path}: #{reason}"}
     end
   end
 

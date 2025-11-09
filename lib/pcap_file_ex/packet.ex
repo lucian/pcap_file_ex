@@ -482,6 +482,31 @@ defmodule PcapFileEx.Packet do
   defp normalize_payload(payload), do: IO.iodata_to_binary(payload)
 
   @doc """
+  Converts a Packet struct to a map for passing to NIFs.
+
+  Note: Only includes the core fields needed for writing packets.
+  Protocol decoding fields (protocols, src, dst, layers, etc.) are not included
+  as they are derived during reading.
+  """
+  @spec to_map(t()) :: map()
+  def to_map(%__MODULE__{} = packet) do
+    # Ensure data is a binary list (Rust expects Vec<u8>)
+    data_list = :binary.bin_to_list(packet.data)
+
+    %{
+      timestamp_secs: packet.timestamp_precise.secs,
+      timestamp_nanos: packet.timestamp_precise.nanos,
+      orig_len: packet.orig_len,
+      data: data_list,
+      datalink: packet.datalink,
+      timestamp_resolution:
+        packet.timestamp_resolution && Atom.to_string(packet.timestamp_resolution),
+      interface_id: packet.interface_id,
+      interface: packet.interface && Interface.to_map(packet.interface)
+    }
+  end
+
+  @doc """
   Returns the list of protocols that may appear in `packet.protocols`.
   """
   @spec known_protocols() :: [atom()]

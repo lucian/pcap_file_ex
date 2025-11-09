@@ -200,6 +200,91 @@ defmodule PcapFileEx.MergeTest do
     end
   end
 
+  describe "nanosecond precision merge" do
+    setup do
+      # Create temporary files for nanosecond precision testing
+      temp_dir = System.tmp_dir!()
+      test_id = :erlang.unique_integer([:positive])
+
+      nano_file1 = Path.join(temp_dir, "nano_merge_1_#{test_id}.pcapng")
+      nano_file2 = Path.join(temp_dir, "nano_merge_2_#{test_id}.pcapng")
+
+      on_exit(fn ->
+        File.rm(nano_file1)
+        File.rm(nano_file2)
+      end)
+
+      {:ok, nano_file1: nano_file1, nano_file2: nano_file2}
+    end
+
+    test "merges PCAPNG files with nanosecond timestamps in correct order", %{
+      nano_file1: file1,
+      nano_file2: file2
+    } do
+      # Create interface with nanosecond resolution
+      interface = %PcapFileEx.Interface{
+        id: 0,
+        linktype: "ethernet",
+        snaplen: 65_535,
+        timestamp_resolution: :nanosecond,
+        timestamp_resolution_raw: "nanosecond",
+        timestamp_offset_secs: 0
+      }
+
+      # File 1: odd nanoseconds (1, 3, 5)
+      packets1 = [
+        create_nano_packet(1000, 1, 0),
+        create_nano_packet(1000, 3, 0),
+        create_nano_packet(1000, 5, 0)
+      ]
+
+      # File 2: even nanoseconds (2, 4, 6)
+      packets2 = [
+        create_nano_packet(1000, 2, 0),
+        create_nano_packet(1000, 4, 0),
+        create_nano_packet(1000, 6, 0)
+      ]
+
+      # Write PCAPNG files
+      {:ok, 3} = PcapFileEx.PcapNgWriter.write_all(file1, [interface], packets1)
+      {:ok, 3} = PcapFileEx.PcapNgWriter.write_all(file2, [interface], packets2)
+
+      # Merge the files
+      {:ok, stream} = Merge.stream([file1, file2])
+      merged_packets = Enum.to_list(stream)
+
+      # Verify count
+      assert length(merged_packets) == 6
+
+      # Verify nanosecond-level ordering: 1, 2, 3, 4, 5, 6
+      expected_nanos = [1, 2, 3, 4, 5, 6]
+      actual_nanos = Enum.map(merged_packets, & &1.timestamp_precise.nanos)
+
+      assert actual_nanos == expected_nanos,
+             "Expected nanosecond order #{inspect(expected_nanos)}, got #{inspect(actual_nanos)}"
+
+      # Verify all have same second component
+      assert Enum.all?(merged_packets, &(&1.timestamp_precise.secs == 1000))
+
+      # Verify chronological ordering (redundant but explicit)
+      assert_chronological_order(merged_packets)
+    end
+
+    # Helper function for creating nanosecond-precise packets
+    defp create_nano_packet(secs, nanos, interface_id) do
+      %PcapFileEx.Packet{
+        timestamp_precise: Timestamp.new(secs, nanos),
+        timestamp: DateTime.from_unix!(secs, :second),
+        orig_len: 60,
+        data: <<0::480>>,
+        datalink: "ethernet",
+        timestamp_resolution: :nanosecond,
+        interface_id: interface_id,
+        interface: nil
+      }
+    end
+  end
+
   # Helper functions
 
   defp assert_chronological_order(packets) do

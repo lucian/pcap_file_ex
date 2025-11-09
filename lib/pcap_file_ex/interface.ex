@@ -49,4 +49,20 @@ defmodule PcapFileEx.Interface do
   defp resolution_from_string("millisecond"), do: :millisecond
   defp resolution_from_string("second"), do: :second
   defp resolution_from_string(_), do: :unknown
+
+  @doc """
+  Converts an Interface struct to a map for passing to NIFs.
+  """
+  @spec to_map(t()) :: map()
+  def to_map(%__MODULE__{} = interface) do
+    %{
+      id: interface.id,
+      name: interface.name,
+      description: interface.description,
+      linktype: interface.linktype,
+      snaplen: interface.snaplen,
+      timestamp_resolution: interface.timestamp_resolution_raw,
+      timestamp_offset_secs: interface.timestamp_offset_secs
+    }
+  end
 end

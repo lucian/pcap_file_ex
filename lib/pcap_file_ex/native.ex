@@ -64,5 +64,18 @@ defmodule PcapFileEx.Native do
   def pcapng_set_filter(_resource, _filters), do: error()
   def pcapng_clear_filter(_resource), do: error()
 
+  # PCAP writer functions
+  def pcap_writer_open(_path, _header_map), do: error()
+  def pcap_writer_append(_path), do: error()
+  def pcap_writer_write_packet(_resource, _packet_map), do: error()
+  def pcap_writer_close(_resource), do: error()
+
+  # PCAPNG writer functions
+  def pcapng_writer_open(_path, _endianness), do: error()
+  def pcapng_writer_append(_path), do: error()
+  def pcapng_writer_write_interface(_resource, _interface_map), do: error()
+  def pcapng_writer_write_packet(_resource, _packet_map), do: error()
+  def pcapng_writer_close(_resource), do: error()
+
   defp error, do: :erlang.nif_error(:nif_not_loaded)
 end

@@ -1,5 +1,78 @@
 # Changelog
 
+## [0.4.0] - 2025-11-09
+
+**MAJOR FEATURE** - PCAP/PCAPNG Writer API (MVP)
+
+### Added
+- **Writer API** - Create PCAP and PCAPNG files from packets
+  - New `PcapFileEx.PcapWriter` module for PCAP file creation
+    - `PcapWriter.open/2` - Create new PCAP files with header
+    - `PcapWriter.write_packet/2` - Write individual packets
+    - `PcapWriter.write_all/3` - Convenience batch writer
+    - `PcapWriter.close/1` - Explicit close with flush
+  - New `PcapFileEx.PcapNgWriter` module for PCAPNG file creation
+    - `PcapNgWriter.open/1` - Create new PCAPNG files
+    - `PcapNgWriter.write_interface/2` - Register interfaces
+    - `PcapNgWriter.write_packet/2` - Write packets with interface tracking
+    - `PcapNgWriter.write_all/4` - Batch write with auto-interface registration
+    - `PcapNgWriter.close/1` - Explicit close with flush
+  - 64KB buffered writes for optimal throughput
+  - Full nanosecond timestamp precision preservation
+  - Thread-safe Rust NIF implementation with Mutex-protected resources
+
+- **High-Level Convenience API**
+  - `PcapFileEx.write/4` - Format auto-detection from file extension
+  - `PcapFileEx.write!/4` - Bang variant that raises on errors
+  - `PcapFileEx.copy/3` - Copy/convert PCAP files with format conversion
+  - `PcapFileEx.export_filtered/4` - Filter and export packets to new file
+  - `:on_error` option (`:halt` or `:skip`) for handling corrupt packets during copy/export
+  - Automatic PCAP ↔ PCAPNG format conversion with interface preservation
+
+- **Timestamp Utilities**
+  - New `PcapFileEx.TimestampShift` module for timestamp manipulation
+  - `TimestampShift.shift_all/2` - Shift timestamps by nanosecond offset
+  - `TimestampShift.normalize_to_epoch/1` - Normalize first packet to Unix epoch
+  - Useful for anonymization and reproducible test files
+
+- **Data Structure Enhancements**
+  - `Header.to_map/1` - Convert header to NIF-compatible map
+  - `Packet.to_map/1` - Convert packet to NIF-compatible map
+  - `Interface.to_map/1` - Convert interface to NIF-compatible map
+  - Bidirectional type conversions (Elixir ↔ Rust)
+
+### Limitations (MVP)
+- **Append mode not supported**
+  - PCAP append: Not supported by upstream pcap-file crate (clear error returned)
+  - PCAPNG append: Not implemented in MVP (requires block scanning/truncation)
+  - Both formats return clear error messages explaining limitations
+  - Create new files or use format conversion as workaround
+  - Future versions will add PCAPNG append support
+
+### Implementation Details
+- **Rust NIFs** (native/pcap_file_ex/src/)
+  - `pcap_writer.rs` - PCAP writer with 4 NIFs (open, write, close, append stub)
+  - `pcapng_writer.rs` - PCAPNG writer with 5 NIFs (open, write_interface, write, close, append stub)
+  - `types.rs` - Reverse type conversions (Elixir → Rust) for all data structures
+  - Rustler Resources for thread-safe writer state management
+  - Interface tracking in Rust NIF layer for PCAPNG validation
+
+- **Testing**
+  - New `test/pcap_file_ex/writer_smoke_test.exs` with 6 tests
+  - Tests cover: PCAP write, PCAPNG write, copy, filter/export, append limitations
+  - All tests pass with round-trip validation (write → read → verify)
+
+### Changed
+- Module aliases in `PcapFileEx` to avoid naming conflicts with `Elixir.Stream`
+- Updated `Native` module with 9 new NIF stubs for writer functions
+
+### Technical Notes
+- Based on spec `specs/20251109-pcap-writer-api.md` (v1.3)
+- Streaming architecture: O(1) memory for files of any size
+- Error propagation: Consistent `{:ok, result} | {:error, reason}` pattern
+- Format detection: Auto-detect from file extension (.pcap vs .pcapng)
+- Interface metadata: Derived from source headers during PCAP→PCAPNG conversion
+
 ## [0.3.0] - 2025-11-09
 
 **MAJOR FEATURE** - Multi-File PCAP Timeline Merge

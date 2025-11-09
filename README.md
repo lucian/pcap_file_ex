@@ -20,6 +20,7 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
 - ✅ **Multi-File Merge** - Merge multiple captures by nanosecond-precision timestamps with clock validation
+- ✅ **PCAP/PCAPNG Writing** - Create, export, filter, and convert captures with format auto-detection
 - ✅ **Validation** - File format validation and accessibility checks
 - ✅ **Property-Based Testing** - 94 property tests with StreamData for comprehensive edge case coverage
 
@@ -978,6 +979,157 @@ end
 
 If drift exceeds 1000ms, the merge operation will fail by default to prevent incorrect chronological ordering.
 
+## Export and Write PCAP Files
+
+Create new PCAP files, filter existing captures, or convert between formats.
+
+### Quick Export (Filter and Write)
+
+```elixir
+# Extract HTTP traffic to new file
+PcapFileEx.export_filtered!(
+  "full_capture.pcap",
+  "http_only.pcap",
+  fn packet -> :http in packet.protocols end
+)
+
+# Time range extraction
+start_time = ~U[2025-11-09 10:00:00Z]
+end_time = ~U[2025-11-09 11:00:00Z]
+
+PcapFileEx.export_filtered!(
+  "full_day.pcapng",
+  "incident_window.pcapng",
+  fn packet ->
+    DateTime.compare(packet.timestamp, start_time) != :lt and
+    DateTime.compare(packet.timestamp, end_time) != :gt
+  end
+)
+
+# Filter by packet size (>1000 bytes)
+PcapFileEx.export_filtered!(
+  "capture.pcap",
+  "large_packets.pcap",
+  fn packet -> byte_size(packet.data) > 1000 end
+)
+```
+
+### Format Conversion
+
+```elixir
+# Convert PCAP to PCAPNG (preserves all packets)
+PcapFileEx.copy("legacy.pcap", "modern.pcapng", format: :pcapng)
+
+# Convert PCAPNG to PCAP
+PcapFileEx.copy("capture.pcapng", "legacy.pcap", format: :pcap)
+
+# Auto-detect format from extension
+PcapFileEx.copy("input.pcap", "output.pcapng")  # Detects .pcapng extension
+```
+
+### Timestamp Manipulation
+
+```elixir
+# Shift all timestamps to start at Unix epoch (anonymization)
+{:ok, packets} = PcapFileEx.read_all("original.pcap")
+normalized = PcapFileEx.TimestampShift.normalize_to_epoch(packets)
+{:ok, header} = PcapFileEx.get_header("original.pcap")
+PcapFileEx.write!("anonymized.pcap", header, normalized)
+
+# Shift by specific offset (e.g., +1 hour in nanoseconds)
+one_hour_ns = 3_600_000_000_000
+shifted = PcapFileEx.TimestampShift.shift_all(packets, one_hour_ns)
+PcapFileEx.write!("time_shifted.pcap", header, shifted)
+```
+
+### Manual Control (Streaming Writes)
+
+For large files or when you need fine-grained control:
+
+```elixir
+# Low-level PCAP writing
+{:ok, header} = PcapFileEx.get_header("input.pcap")
+{:ok, writer} = PcapFileEx.PcapWriter.open("output.pcap", header)
+
+PcapFileEx.stream!("input.pcap")
+|> Stream.filter(fn packet -> byte_size(packet.data) > 1000 end)
+|> Enum.each(fn packet ->
+  :ok = PcapFileEx.PcapWriter.write_packet(writer, packet)
+end)
+
+:ok = PcapFileEx.PcapWriter.close(writer)
+```
+
+### Batch vs Streaming
+
+```elixir
+# ✅ Small datasets (<1000 packets) - batch write
+{:ok, packets} = PcapFileEx.read_all("small.pcap")
+filtered = Enum.filter(packets, fn p -> :tcp in p.protocols end)
+{:ok, header} = PcapFileEx.get_header("small.pcap")
+PcapFileEx.write!("tcp_only.pcap", header, filtered)
+
+# ✅ Large datasets (>1GB) - use export_filtered (streaming)
+PcapFileEx.export_filtered!(
+  "huge_50gb.pcapng",
+  "filtered.pcap",
+  fn p -> :tcp in p.protocols end
+)
+```
+
+### PCAPNG Multi-Interface Writing
+
+```elixir
+# Create PCAPNG with multiple interfaces
+interfaces = [
+  %PcapFileEx.Interface{
+    id: 0,
+    linktype: "ethernet",
+    snaplen: 65535,
+    name: "eth0",
+    timestamp_resolution: :microsecond,
+    timestamp_resolution_raw: "microsecond",
+    timestamp_offset_secs: 0
+  },
+  %PcapFileEx.Interface{
+    id: 1,
+    linktype: "wifi",
+    snaplen: 65535,
+    name: "wlan0",
+    timestamp_resolution: :nanosecond,
+    timestamp_resolution_raw: "nanosecond",
+    timestamp_offset_secs: 0
+  }
+]
+
+# Packets must have interface_id set for PCAPNG
+packets = [
+  %PcapFileEx.Packet{
+    timestamp_precise: PcapFileEx.Timestamp.new(1000, 0),
+    orig_len: 100,
+    data: <<...>>,
+    interface_id: 0  # Uses eth0 interface
+  },
+  %PcapFileEx.Packet{
+    timestamp_precise: PcapFileEx.Timestamp.new(1001, 0),
+    orig_len: 200,
+    data: <<...>>,
+    interface_id: 1  # Uses wlan0 interface
+  }
+]
+
+{:ok, count} = PcapFileEx.PcapNgWriter.write_all(
+  "multi_interface.pcapng",
+  interfaces,
+  packets
+)
+```
+
+**Note:** Append mode has limitations in v0.4.0:
+- **PCAP append**: Not supported by upstream crate (returns clear error)
+- **PCAPNG append**: Not implemented in MVP
+- Future versions will add PCAPNG append support
+
 ## Timestamp Precision Support
 
 PcapFileEx automatically detects and supports both **microsecond** and **nanosecond** timestamp precision in PCAP files:
@@ -1394,10 +1546,9 @@ PcapFileEx.stream!("huge_10gb.pcap")
 - [x] HTTP/DNS protocol decoding
 - [x] Nanosecond timestamp precision support
 - [x] **Multi-file timeline merge** - Chronologically merge multiple PCAP/PCAPNG files with nanosecond precision, interface remapping, source annotation, and clock validation
+- [x] **PCAP/PCAPNG writer API** - Create, export, filter, and convert captures with format auto-detection, timestamp manipulation, and streaming writes (v0.4.0)
 
 ### Planned Features
-
-- [ ] **PCAP writer/trimming API** - Export filtered packets back to PCAP/PCAPNG format for sharing or regression testing
 - [ ] **Display filter → PreFilter compiler** - Convert Wireshark-style display filters into PreFilter tuples for familiar syntax
 - [ ] **Telemetry hooks** - Emit `:telemetry` events for packet decode, HTTP parsing, and PreFilter hits for observability
 - [ ] **Higher-level protocol decoders** - TLS, DNS (enhanced), HTTP/2 decoders as optional dependencies

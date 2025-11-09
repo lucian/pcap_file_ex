@@ -160,3 +160,134 @@ pub fn interface_to_map(
         timestamp_offset_secs,
     })
 }
+
+// ============================================================================
+// Reverse conversions (Elixir → Rust) for writer support
+// ============================================================================
+
+use rustler::Error;
+use std::borrow::Cow;
+use std::time::Duration;
+
+/// Parse timestamp resolution string to TsResolution enum
+fn parse_ts_resolution(ts_resolution_str: &str) -> Result<TsResolution, Error> {
+    match ts_resolution_str.to_lowercase().as_str() {
+        "microsecond" => Ok(TsResolution::MicroSecond),
+        "nanosecond" => Ok(TsResolution::NanoSecond),
+        _ => Err(Error::Term(Box::new(format!(
+            "Invalid timestamp resolution: {}. Expected 'microsecond' or 'nanosecond'",
+            ts_resolution_str
+        )))),
+    }
+}
+
+/// Parse endianness string to Endianness enum
+fn parse_endianness(endianness_str: &str) -> Result<Endianness, Error> {
+    match endianness_str.to_lowercase().as_str() {
+        "big" => Ok(Endianness::Big),
+        "little" => Ok(Endianness::Little),
+        _ => Err(Error::Term(Box::new(format!(
+            "Invalid endianness: {}. Expected 'big' or 'little'",
+            endianness_str
+        )))),
+    }
+}
+
+/// Parse interface timestamp resolution string to InterfaceTsResolution
+/// Returns the TsResolution byte value to be used with InterfaceTsResolution::new()
+fn parse_interface_ts_resolution_byte(ts_resolution_str: &str) -> Result<u8, Error> {
+    match ts_resolution_str.to_lowercase().as_str() {
+        "nanosecond" => Ok(9),  // TsResolution::NANO
+        "microsecond" => Ok(6), // TsResolution::MICRO
+        "millisecond" => Ok(3), // TsResolution::MILLI
+        "second" => Ok(0),      // TsResolution::SEC
+        _ => {
+            // Try parsing custom format like "100ns" - need to encode as byte
+            // For now, default to microsecond for unknown formats
+            Err(Error::Term(Box::new(format!(
+                "Invalid interface timestamp resolution: {}. Expected 'nanosecond', 'microsecond', 'millisecond', or 'second'",
+                ts_resolution_str
+            ))))
+        }
+    }
+}
+
+/// Convert HeaderMap to PcapHeader
+pub fn map_to_pcap_header(map: &HeaderMap) -> Result<PcapHeader, Error> {
+    let datalink = parse_datalink_string(&map.datalink);
+    let ts_resolution = parse_ts_resolution(&map.ts_resolution)?;
+    let endianness = parse_endianness(&map.endianness)?;
+
+    Ok(PcapHeader {
+        version_major: map.version_major,
+        version_minor: map.version_minor,
+        ts_correction: 0, // Should always be 0 per PCAP spec
+        ts_accuracy: 0,   // Should always be 0 per PCAP spec
+        snaplen: map.snaplen,
+        datalink,
+        ts_resolution,
+        endianness,
+    })
+}
+
+/// Convert PacketMap to PcapPacket
+pub fn map_to_pcap_packet(map: &PacketMap) -> Result<PcapPacket<'static>, Error> {
+    let timestamp = Duration::new(map.timestamp_secs, map.timestamp_nanos);
+
+    // Validate orig_len >= data.len()
+    if map.orig_len < map.data.len() as u32 {
+        return Err(Error::Term(Box::new(format!(
+            "Invalid packet: orig_len ({}) must be >= data length ({})",
+            map.orig_len,
+            map.data.len()
+        ))));
+    }
+
+    Ok(PcapPacket {
+        timestamp,
+        orig_len: map.orig_len,
+        data: Cow::Owned(map.data.clone()),
+    })
+}
+
+/// Convert InterfaceMap to InterfaceDescriptionBlock
+pub fn map_to_interface_block(
+    map: &InterfaceMap,
+) -> Result<InterfaceDescriptionBlock<'static>, Error> {
+    let linktype = parse_datalink_string(&map.linktype);
+    let ts_resolution_byte = parse_interface_ts_resolution_byte(&map.timestamp_resolution)?;
+    let ts_resolution = InterfaceTsResolution::new(ts_resolution_byte)
+        .map_err(|e| Error::Term(Box::new(format!("Invalid timestamp resolution: {}", e))))?;
+
+    let mut options = Vec::new();
+
+    // Add interface name if provided
+    if let Some(ref name) = map.name {
+        options.push(InterfaceDescriptionOption::IfName(Cow::Owned(name.clone())));
+    }
+
+    // Add interface description if provided
+    if let Some(ref description) = map.description {
+        options.push(InterfaceDescriptionOption::IfDescription(Cow::Owned(
+            description.clone(),
+        )));
+    }
+
+    // Add timestamp resolution option
+    options.push(InterfaceDescriptionOption::IfTsResol(
+        ts_resolution.to_raw(),
+    ));
+
+    // Add timestamp offset if non-zero
+    if map.timestamp_offset_secs > 0 {
+        options.push(InterfaceDescriptionOption::IfTsOffset(
+            map.timestamp_offset_secs, // Already u64, no cast needed
+        ));
+    }
+
+    Ok(InterfaceDescriptionBlock {
+        linktype,
+        snaplen: map.snaplen,
+        options, // No Cow wrapper needed - options is already Vec
+    })
+}

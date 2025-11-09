@@ -64,6 +64,17 @@ end
 | Any | Complex application logic | Filter/DisplayFilter | Flexible (Elixir-side) |
 | Any | Wireshark-style expressions | DisplayFilter | Familiar syntax |
 
+### 5. Writer Format Selection
+
+| Input Format | Output Needed | Use This | Why |
+|--------------|---------------|----------|-----|
+| Any | Auto-detect | `PcapFileEx.write/3` | Detects from extension (.pcap vs .pcapng) |
+| PCAP | PCAP | `PcapFileEx.PcapWriter` | Direct PCAP → PCAP (fastest) |
+| PCAPNG | PCAPNG | `PcapFileEx.PcapNgWriter` | Preserves interfaces |
+| Any | Specific format | `PcapFileEx.copy/3` with `format:` | Explicit conversion |
+| Small (<1000 pkts) | Any | `write!/3` batch | Simplest API |
+| Large (>1GB) | Any | Streaming writer | O(1) memory, manual open/write/close |
+
 ## Common Mistakes to Avoid
 
 ### ❌ Mistake 1: Wrong Format Detection
@@ -160,6 +171,51 @@ packet = PcapFileEx.Pcap.next_packet(reader, decode: false)  # NO SUCH OPTION!
 # DO: Disable at stream/read_all level
 packets = PcapFileEx.stream!("file.pcap", decode: false) |> Enum.to_list()
 {:ok, packets} = PcapFileEx.read_all("file.pcap", decode: false)
+```
+
+### ❌ Mistake 8: Wrong Writer for Format Conversion
+
+```elixir
+# DON'T: Use format-specific writer for conversion (complex and error-prone)
+{:ok, packets} = PcapFileEx.read_all("input.pcap")
+{:ok, header} = PcapFileEx.get_header("input.pcap")
+# Then manually create PCAPNG interfaces, assign interface_id, etc... (lots of code!)
+
+# DO: Use copy/3 for format conversion (simple and handles all details)
+PcapFileEx.copy("input.pcap", "output.pcapng", format: :pcapng)
+```
+
+### ❌ Mistake 9: Loading Huge Files for Filtering
+
+```elixir
+# DON'T: Load entire 10GB file into memory to filter (OOM crash!)
+{:ok, all_packets} = PcapFileEx.read_all("huge_10gb.pcap")
+filtered = Enum.filter(all_packets, fn p -> :http in p.protocols end)
+{:ok, header} = PcapFileEx.get_header("huge_10gb.pcap")
+PcapFileEx.write!("filtered.pcap", header, filtered)
+
+# DO: Use export_filtered (streaming - constant memory)
+PcapFileEx.export_filtered!(
+  "huge_10gb.pcap",
+  "filtered.pcap",
+  fn p -> :http in p.protocols end
+)
+```
+
+### ❌ Mistake 10: Forgetting interface_id for PCAPNG
+
+```elixir
+# DON'T: Write PCAP packets directly to PCAPNG (missing interface_id!)
+{:ok, packets} = PcapFileEx.read_all("input.pcap")
+# Packets have interface_id == nil, but PCAPNG writer requires it!
+PcapFileEx.PcapNgWriter.write_all("output.pcapng", interfaces, packets)  # FAILS!
+
+# DO: Use high-level API that handles conversion automatically
+PcapFileEx.copy("input.pcap", "output.pcapng", format: :pcapng)
+
+# OR: Manually assign interface_id if using low-level API
+packets_with_interface = Enum.map(packets, &%{&1 | interface_id: 0})
+PcapFileEx.PcapNgWriter.write_all("output.pcapng", interfaces, packets_with_interface)
 ```
 
 ## Essential Patterns
@@ -575,4 +631,5 @@ DateTime.compare(packet.timestamp, some_datetime)  # => :lt
 - [HTTP Guide](usage-rules/http.md) - HTTP decoding patterns
 - [Format Guide](usage-rules/formats.md) - PCAP vs PCAPNG differences
 - [Merging Guide](usage-rules/merging.md) - Multi-file chronological merge patterns
+- [Writing Guide](usage-rules/writing.md) - Creating and exporting PCAP files
 - [Examples](usage-rules/examples.md) - Complete working examples
