@@ -240,13 +240,7 @@ defmodule PcapFileEx.Filter do
       {:ok, {layers, payload}} ->
         protocol_match?(List.wrap(layers), payload, protocol)
 
-      {:ok, layers} when is_list(layers) ->
-        protocol_match?(layers, "", protocol)
-
-      {:ok, other} ->
-        protocol_match?(List.wrap(other), "", protocol)
-
-      {:error, _} ->
+      {:error, _partial, _reason} ->
         false
     end
   end

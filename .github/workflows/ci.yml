@@ -87,6 +87,15 @@ jobs:
           restore-keys: |
             lint-native-${{ runner.os }}
 
+      - name: Restore PLT cache
+        uses: actions/cache@v4
+        id: plt_cache
+        with:
+          key: plt-${{ runner.os }}-28.1.1-1.19.2-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            plt-${{ runner.os }}-28.1.1-1.19.2-
+          path: priv/plts
+
       - name: Check Rust formatting
         run: cargo fmt --manifest-path=native/pcap_file_ex/Cargo.toml --all --check
 
@@ -96,8 +105,15 @@ jobs:
       - name: Install Elixir deps
         run: mix deps.get
 
+      - name: Create PLTs
+        if: steps.plt_cache.outputs.cache-hit != 'true'
+        run: mix dialyzer --plt
+
       - name: Run Credo
         run: mix credo --strict
+
+      - name: Run Dialyzer
+        run: mix dialyzer --format github --format dialyxir
 
   version-sync:
     name: Verify version synchronization

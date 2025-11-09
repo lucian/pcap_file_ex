@@ -54,7 +54,7 @@ defmodule PcapFileEx.Packet do
     :dst,
     :layers,
     :payload,
-    :decoded
+    decoded: %{}
   ]
 
   @doc """
@@ -160,11 +160,8 @@ defmodule PcapFileEx.Packet do
       {:ok, decoded} ->
         decoded
 
-      {:error, reason} ->
+      {:error, _partial, reason} ->
         raise RuntimeError, "pkt decode failed: #{inspect(reason)}"
-
-      other ->
-        other
     end
   end
 
@@ -261,7 +258,7 @@ defmodule PcapFileEx.Packet do
   def attach_decoded(%__MODULE__{} = packet) do
     case decode_registered(packet) do
       {:ok, {protocol, value}} ->
-        decoded = Map.put(packet.decoded || %{}, protocol, value)
+        decoded = Map.put(packet.decoded, protocol, value)
         %__MODULE__{packet | decoded: decoded}
 
       _ ->
@@ -296,11 +293,8 @@ defmodule PcapFileEx.Packet do
           {:error, {:protocol_not_found, required_protocol}}
         end
 
-      {:ok, payload} when is_binary(payload) ->
-        payload_result(payload)
-
-      {:error, _} = error ->
-        error
+      {:error, _partial, reason} ->
+        {:error, reason}
 
       other ->
         {:error, {:unexpected_decode_result, other}}
@@ -344,7 +338,7 @@ defmodule PcapFileEx.Packet do
 
   defp build_protocol_stack(layers, payload) do
     base =
-      (layers || [])
+      layers
       |> Enum.map(&layer_atom/1)
       |> Enum.reject(&is_nil/1)
 
@@ -364,11 +358,11 @@ defmodule PcapFileEx.Packet do
 
   defp decode_layers(proto, data) do
     case :pkt.decode(proto, data) do
-      {:ok, {layers, payload}} -> {:ok, {List.wrap(layers), payload}}
-      {:ok, layers} when is_list(layers) -> {:ok, {layers, ""}}
-      {:ok, layer} -> {:ok, {List.wrap(layer), ""}}
-      {:error, _} = error -> error
-      other -> {:error, {:unexpected_decode, other}}
+      {:ok, {layers, payload}} ->
+        {:ok, {List.wrap(layers), payload}}
+
+      {:error, _partial, reason} ->
+        {:error, reason}
     end
   rescue
     _ -> {:error, :decode_failed}
@@ -384,7 +378,7 @@ defmodule PcapFileEx.Packet do
   end
 
   defp safe_match?(%{matcher: matcher}, layers, payload) do
-    matcher.(layers || [], normalize_payload(payload))
+    matcher.(layers, normalize_payload(payload))
   rescue
     _ -> false
   end

@@ -28,6 +28,10 @@ native/pcap_file_ex/target/
 # Compiled native libraries
 priv/
 
+# Dialyzer PLT files
+/priv/plts/*.plt
+/priv/plts/*.plt.hash
+
 # Generated test fixtures
 test/fixtures/*.pcap
 test/fixtures/*.pcapng
@@ -43,4 +47,4 @@ checksum-*.exs
 .claude/
 
 # AI planning documents (ephemeral)
-history/
+# history/

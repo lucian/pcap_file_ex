@@ -25,7 +25,13 @@ defmodule PcapFileEx.MixProject do
       homepage_url: @source_url,
 
       # Aliases
-      aliases: aliases()
+      aliases: aliases(),
+
+      # Dialyzer
+      dialyzer: [
+        plt_file: {:no_warn, "priv/plts/project.plt"},
+        plt_add_deps: :app_tree
+      ]
     ]
   end
 
@@ -139,7 +145,8 @@ defmodule PcapFileEx.MixProject do
       {:stream_data, "~> 1.2", only: [:dev, :test], runtime: false},
       {:tidewave, "~> 0.5.1", only: :dev},
       {:bandit, "~> 1.0", only: :dev},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
     ]
   end
 end

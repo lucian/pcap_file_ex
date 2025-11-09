@@ -175,6 +175,7 @@ defmodule PcapFileEx.TCP do
 
   defp tcp_packet?(_), do: false
 
+  @dialyzer {:nowarn_function, add_payload: 4}
   @spec add_payload(DirectionState.t(), Packet.t(), binary(), options()) ::
           {[HTTPMessage.t()], DirectionState.t()}
   defp add_payload(%DirectionState{} = state, packet, payload, opts) do
