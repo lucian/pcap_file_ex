@@ -104,15 +104,18 @@ jobs:
         run: |
           MIX_VERSION=$(grep '@version' mix.exs | sed 's/.*"\(.*\)".*/\1/')
           CARGO_VERSION=$(grep '^version' native/pcap_file_ex/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          # Strip -dev suffix from mix version for comparison
+          MIX_VERSION_BASE=$(echo "${MIX_VERSION}" | sed 's/-dev$//')
           {
             echo "mix=${MIX_VERSION}"
+            echo "mix_base=${MIX_VERSION_BASE}"
             echo "cargo=${CARGO_VERSION}"
           } >> $GITHUB_OUTPUT
 
       - name: Check versions match
         run: |
-          if [ "${{ steps.versions.outputs.mix }}" != "${{ steps.versions.outputs.cargo }}" ]; then
-            echo "Version mismatch: mix.exs=${{ steps.versions.outputs.mix }} vs Cargo.toml=${{ steps.versions.outputs.cargo }}"
+          if [ "${{ steps.versions.outputs.mix_base }}" != "${{ steps.versions.outputs.cargo }}" ]; then
+            echo "Version mismatch: mix.exs=${{ steps.versions.outputs.mix }} (base: ${{ steps.versions.outputs.mix_base }}) vs Cargo.toml=${{ steps.versions.outputs.cargo }}"
             exit 1
           fi
 
