@@ -1,0 +1,60 @@
+name: Dependency Audit
+
+on:
+  # Run weekly on Monday morning
+  schedule:
+    - cron: '0 9 * * 1'
+  # Allow manual trigger
+  workflow_dispatch:
+  # Run on pushes to master (but not PRs)
+  push:
+    branches:
+      - master
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  audit:
+    name: Check dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 28.1.1
+          elixir-version: 1.19.2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Elixir deps
+        run: mix deps.get
+
+      - name: Check for outdated Elixir dependencies
+        run: mix hex.outdated
+
+      # Cache cargo binaries
+      - uses: actions/cache@v4
+        id: cargo-tools-cache
+        with:
+          path: ~/.cargo/bin/cargo-outdated
+          key: cargo-outdated-${{ runner.os }}-v1
+
+      - name: Install cargo-binstall
+        if: steps.cargo-tools-cache.outputs.cache-hit != 'true'
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-outdated
+        if: steps.cargo-tools-cache.outputs.cache-hit != 'true'
+        run: cargo binstall --no-confirm cargo-outdated
+
+      - name: Check for outdated Rust dependencies
+        run: cd native/pcap_file_ex && cargo outdated --exit-code 0
+
+      # Use official cargo-deny action (fast with built-in caching)
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: native/pcap_file_ex/Cargo.toml
+          command: check
+          arguments: advisories licenses
