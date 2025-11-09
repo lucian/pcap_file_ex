@@ -42,4 +42,15 @@ end
 
 TestFixtureSetup.ensure_fixtures()
 
+# Configure property-based testing
+# Use more iterations in CI for thorough testing
+max_runs =
+  case System.get_env("CI") do
+    "true" -> 1000
+    _ -> 100
+  end
+
+# Store max_runs in application env for property tests to access
+Application.put_env(:stream_data, :max_runs, max_runs)
+
 ExUnit.start()

@@ -13,6 +13,7 @@ defmodule PcapFileEx.MixProject do
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      elixirc_paths: elixirc_paths(Mix.env()),
 
       # Hex metadata
       description: description(),
@@ -27,6 +28,10 @@ defmodule PcapFileEx.MixProject do
       aliases: aliases()
     ]
   end
+
+  # Specifies which paths to compile per environment
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help compile.app" to learn about applications.
   def application do
@@ -126,7 +131,8 @@ defmodule PcapFileEx.MixProject do
       {:jason, "~> 1.4", optional: true},
       {:benchee, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
-      {:igniter, "~> 0.7.0"}
+      {:igniter, "~> 0.7.0"},
+      {:stream_data, "~> 1.2", only: [:dev, :test], runtime: false}
     ]
   end
 end

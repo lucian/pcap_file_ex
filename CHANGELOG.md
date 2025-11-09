@@ -11,11 +11,21 @@
   - Implements String.Chars and Inspect protocols for pretty printing
   - Ideal for merging packets from multiple files chronologically with nanosecond accuracy
   - Comprehensive test suite with 80+ test cases
+- **Property-Based Testing with StreamData**
+  - 94 new property tests covering timestamps, packets, filters, streams, and decoding
+  - Comprehensive generators for all core data types (timestamps, packets, filters, etc.)
+  - Environment-aware configuration: 100 test runs locally, 1000 in CI
+  - Tests edge cases automatically: boundary timestamps, truncated packets, filter compositions
+  - Validates invariants: timestamp ordering, packet consistency, filter count properties
+  - Zero performance impact: tests run in ~0.9 seconds (total suite: ~1.2s)
+  - In-memory testing for fast, deterministic results
+  - See `test/property_test/` for 5 test files and `test/support/generators.ex` for reusable generators
 
 ### Changed
 - improved documentation
 - Updated `PcapFileEx.Packet` struct to include `timestamp_precise` field
 - Modified timestamp conversion to preserve nanosecond precision when possible
+- Added `test/support` to elixirc_paths for test environment (supports property test generators)
 
 ### Fixed
 

@@ -20,6 +20,7 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
 - ✅ **Validation** - File format validation and accessibility checks
+- ✅ **Property-Based Testing** - 94 property tests with StreamData for comprehensive edge case coverage
 
 ## Supported Platforms
 
@@ -919,7 +920,8 @@ PcapFileEx.stream("huge_10gb.pcap")
 - [x] Statistics and analysis
 - [x] Packet filtering DSL
 - [x] File validation
-- [x] Comprehensive tests (65 passing)
+- [x] Comprehensive tests (303 tests: 193 example-based, 94 property-based, 16 doctests)
+- [x] Property-based testing with StreamData for edge case coverage
 - [ ] Packet writing capabilities
 - [ ] Protocol parsing helpers (Ethernet, IP, TCP, etc.)
 
@@ -1073,14 +1075,56 @@ Contributions are welcome! Please:
 
 ## Testing
 
+PcapFileEx has a comprehensive test suite including property-based tests:
+
 ```bash
-# Run all tests
+# Run all tests (303 tests total)
 mix test
+
+# Run only property-based tests (94 properties)
+mix test test/property_test/
+
+# Run specific property test file
+mix test test/property_test/timestamp_property_test.exs
 
 # Generate test capture file
 cd test/fixtures
 ./capture_test_traffic.sh sample.pcapng
 ```
+
+### Property-Based Testing
+
+The library uses [StreamData](https://github.com/whatyouhide/stream_data) for property-based testing, automatically testing thousands of edge cases:
+
+**Test Coverage:**
+- **Timestamp operations** (18 properties) - Comparison transitivity, diff commutativity, monotonicity
+- **Packet structures** (14 properties) - Invariants like `orig_len >= data_size`, timestamp validity
+- **Filter operations** (20 properties) - Count preservation, idempotence, composition correctness
+- **Stream behaviors** (16 properties) - Lazy evaluation, filter equivalence, pagination
+- **Decoding robustness** (13 properties) - Never raises, endpoint validation, protocol consistency
+- **Edge cases** - Boundary timestamps (epoch, year 2038), truncated packets, empty streams
+
+**Environment-Aware:**
+- Local development: 100 iterations per property (~0.9s)
+- CI environment: 1000 iterations per property (set `CI=true`)
+
+**Example property test:**
+```elixir
+# From test/property_test/timestamp_property_test.exs
+property "timestamp comparison is transitive" do
+  check all ts1 <- timestamp_generator(),
+            ts2 <- timestamp_generator(),
+            ts3 <- timestamp_generator() do
+    # If ts1 < ts2 and ts2 < ts3, then ts1 < ts3
+    if Timestamp.compare(ts1, ts2) == :lt and
+       Timestamp.compare(ts2, ts3) == :lt do
+      assert Timestamp.compare(ts1, ts3) == :lt
+    end
+  end
+end
+```
+
+See `test/property_test/` for all property tests and `test/support/generators.ex` for reusable generators.
 
 ## License
 
