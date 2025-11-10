@@ -95,19 +95,17 @@ mix compile
 
 > **Note:** When using as a Git dependency, the native code will be compiled automatically during `mix compile`. Once published to Hex, precompiled binaries will be used automatically for supported platforms.
 
-### From Hex (Coming Soon)
-
-Once published to Hex, installation will be:
+### From Hex
 
 ```elixir
 def deps do
   [
-    {:pcap_file_ex, "~> 0.1.0"}
+    {:pcap_file_ex, "~> 0.4.0"}
   ]
 end
 ```
 
-Precompiled binaries will be downloaded automatically for supported platforms, eliminating the need for a Rust toolchain in most cases.
+Precompiled binaries are downloaded automatically for supported platforms.
 
 ## Getting Started
 
