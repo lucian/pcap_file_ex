@@ -83,7 +83,17 @@ defmodule PcapFileEx.DecoderRegistryPropertyTest do
 
   property "decoder result is always wrapped in :ok tuple if not already" do
     check all(
-            result <- one_of([constant(:ok), constant(:error), binary(), integer(), term()]),
+            result <-
+              one_of([
+                constant(:ok),
+                constant(:error),
+                binary(),
+                integer(),
+                boolean(),
+                atom(:alphanumeric),
+                list_of(integer(), max_length: 10),
+                map_of(atom(:alphanumeric), binary(), max_length: 5)
+              ]),
             payload <- binary()
           ) do
       DecoderRegistry.register(%{
