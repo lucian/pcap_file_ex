@@ -211,13 +211,13 @@ defmodule PcapFileEx.Packet do
   @spec decode_registered(t()) :: {:ok, {atom(), term()}} | :no_match | {:error, term()}
   def decode_registered(%__MODULE__{} = packet) do
     with {:ok, {layers, payload}} <- layers_payload(packet),
-         {:ok, entry} <- find_decoder(layers, payload) do
+         {:ok, {entry, context}} <- find_decoder(layers, payload) do
       case cached_decoded(packet, entry.protocol) do
         {:ok, value} ->
           {:ok, {entry.protocol, value}}
 
         :miss ->
-          case safe_decode(entry, payload) do
+          case safe_decode(entry, context, payload) do
             {:ok, decoded} -> {:ok, {entry.protocol, decoded}}
             other -> other
           end
@@ -345,10 +345,9 @@ defmodule PcapFileEx.Packet do
     applications =
       DecoderRegistry.list()
       |> Enum.reduce([], fn entry, acc ->
-        if safe_match?(entry, layers, payload) do
-          acc ++ [entry.protocol]
-        else
-          acc
+        case safe_match?(entry, layers, payload) do
+          {:match, _context} -> acc ++ [entry.protocol]
+          _ -> acc
         end
       end)
 
@@ -370,21 +369,35 @@ defmodule PcapFileEx.Packet do
 
   defp find_decoder(layers, payload) do
     DecoderRegistry.list()
-    |> Enum.find(&safe_match?(&1, layers, payload))
+    |> Enum.find_value(fn entry ->
+      case safe_match?(entry, layers, payload) do
+        {:match, context} -> {:ok, {entry, context}}
+        false -> nil
+        _ -> nil
+      end
+    end)
     |> case do
       nil -> :no_match
-      entry -> {:ok, entry}
+      # {:ok, {entry, context}}
+      result -> result
     end
   end
 
   defp safe_match?(%{matcher: matcher}, layers, payload) do
-    matcher.(layers, normalize_payload(payload))
+    case matcher.(layers, normalize_payload(payload)) do
+      # New API
+      {:match, context} -> {:match, context}
+      # Old API (backward compat)
+      true -> {:match, nil}
+      false -> false
+      _ -> false
+    end
   rescue
     _ -> false
   end
 
-  defp safe_decode(%{decoder: decoder}, payload) do
-    case decoder.(normalize_payload(payload)) do
+  defp safe_decode(%{decoder: decoder}, context, payload) do
+    case decoder.(context, normalize_payload(payload)) do
       {:ok, value} -> {:ok, value}
       {:error, reason} -> {:error, reason}
       value -> {:ok, value}

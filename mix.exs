@@ -1,7 +1,7 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.4.1-dev"
+  @version "0.5.0-dev"
   @source_url "https://github.com/lucian/pcap_file_ex"
   @dev? String.ends_with?(@version, "-dev")
   @force_build? System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]

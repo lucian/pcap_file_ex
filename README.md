@@ -1307,7 +1307,36 @@ end
 
 ### Custom Decoders
 
-You can extend the application-layer protocol support by registering additional decoders:
+You can extend the application-layer protocol support by registering additional decoders.
+
+**New API (v0.5.0+)** - Matchers can return context to decoders:
+
+```elixir
+PcapFileEx.DecoderRegistry.register(%{
+  protocol: :my_proto,
+  matcher: fn layers, payload ->
+    # Extract context from layers when matching
+    if Enum.any?(layers, &match?({:udp, _, _, _, _, _}, &1)) do
+      case MyProto.decode(IO.iodata_to_binary(payload)) do
+        {:ok, decoded} -> {:match, decoded}  # Cache decoded result
+        _ -> false
+      end
+    else
+      false
+    end
+  end,
+  decoder: fn cached_decoded, _payload ->
+    # Use cached result from matcher
+    {:ok, cached_decoded}
+  end,
+  fields: [
+    %{id: "myproto.value", type: :integer, extractor: fn decoded -> decoded["value"] end},
+    %{id: "myproto.sensor", type: :string, extractor: fn decoded -> decoded["sensor"] end}
+  ]
+})
+```
+
+**Legacy API** (still supported with deprecation warnings):
 
 ```elixir
 PcapFileEx.DecoderRegistry.register(%{
@@ -1317,10 +1346,7 @@ PcapFileEx.DecoderRegistry.register(%{
       MyProto.match?(IO.iodata_to_binary(payload))
   end,
   decoder: fn payload -> {:ok, MyProto.decode(IO.iodata_to_binary(payload))} end,
-  fields: [
-    %{id: "myproto.value", type: :integer, extractor: fn decoded -> decoded["value"] end},
-    %{id: "myproto.sensor", type: :string, extractor: fn decoded -> decoded["sensor"] end}
-  ]
+  fields: [...]
 })
 
 # Read packets using the custom decoder

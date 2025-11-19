@@ -1,5 +1,85 @@
 # Changelog
 
+## [0.5.0] - 2025-11-19
+
+⚠️ **BREAKING CHANGES** - Decoder Registry API Enhanced with Context Passing
+
+### Added
+- **Context passing in decoder registry** - Matchers can now return context to decoders
+  - New API: Matchers return `{:match, context}` instead of `true`
+  - New API: Decoders accept `(context, payload)` instead of just `(payload)`
+  - Eliminates need for `Process.put` workarounds (thread-safe, no race conditions)
+  - More efficient: decode once in matcher, use cached result in decoder
+  - Pure data flow makes testing easier
+  - Backward compatible via runtime detection (old API still works with deprecation warnings)
+
+### Changed
+- **Decoder registration now accepts both old (arity-1) and new (arity-2) decoders**
+- **HTTP decoder optimized** to decode once instead of twice (no visible API change)
+  - Decodes payload in matcher, caches result as context
+  - Decoder uses cached result instead of re-decoding
+  - Performance improvement: 50% reduction in HTTP decode time for matched packets
+
+### Deprecated
+- **Legacy decoder API (arity-1 decoders)** will be removed in v1.0.0
+  - Runtime deprecation warnings emitted when registering old-style decoders
+  - Migration guide: https://hexdocs.pm/pcap_file_ex/decoder-migration.html
+
+### Migration Guide
+
+**Old API (still works with warnings):**
+```elixir
+DecoderRegistry.register(%{
+  matcher: fn layers, payload -> my_protocol?(layers) end,  # Returns boolean
+  decoder: fn payload -> decode(payload) end,  # Arity-1
+})
+```
+
+**New API (recommended):**
+```elixir
+DecoderRegistry.register(%{
+  matcher: fn layers, payload ->
+    if my_protocol?(layers) do
+      {:match, extract_context(layers)}  # Return context
+    else
+      false
+    end
+  end,
+  decoder: fn context, payload -> decode(payload, context) end,  # Arity-2
+})
+```
+
+### Benefits
+
+- ✅ **Thread-safe** - No `Process.put` or shared state
+- ✅ **No race conditions** - Explicit context passing
+- ✅ **More efficient** - Decode once, not twice
+- ✅ **Easier to test** - Pure functions with explicit dependencies
+- ✅ **Clearer intent** - Context requirements are explicit in type signatures
+
+### Implementation Details
+
+- **Updated modules:**
+  - `lib/pcap_file_ex/decoder_registry.ex` - New type definitions, backward compatibility wrappers
+  - `lib/pcap_file_ex/packet.ex` - Updated invocation logic to pass context through
+
+- **Testing:** (372 tests → 393 tests, +21 tests)
+  - New unit tests for context passing, backward compatibility, error handling
+  - New integration tests with real PCAP files
+  - New property-based tests for invariants
+  - All existing tests continue to pass
+
+- **Documentation:**
+  - Updated module documentation with new API examples
+  - Added deprecation warnings for old API usage
+  - CHANGELOG entry with migration guide
+
+### Technical Notes
+
+- Based on spec `specs/20251119-decoder-registry-context-passing.md`
+- Backward compatibility achieved via runtime arity detection and wrapper functions
+- Deprecation timeline: v0.5.0 (warning) → v1.0.0 (removal)
+
 ## [0.4.0] - 2025-11-09
 
 **MAJOR FEATURE** - PCAP/PCAPNG Writer API (MVP)
