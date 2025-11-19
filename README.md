@@ -100,7 +100,7 @@ mix compile
 ```elixir
 def deps do
   [
-    {:pcap_file_ex, "~> 0.4.0"}
+    {:pcap_file_ex, "~> 0.5.0"}
   ]
 end
 ```
