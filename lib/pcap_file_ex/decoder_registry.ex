@@ -105,7 +105,7 @@ defmodule PcapFileEx.DecoderRegistry do
 
         decoder: fn context, payload -> ... end
 
-      See migration guide: https://hexdocs.pm/pcap_file_ex/decoder-migration.html
+      See migration guide: https://hexdocs.pm/pcap_file_ex/changelog.html#v0-5-0-2025-11-19
       """)
     end
 

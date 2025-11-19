@@ -23,7 +23,7 @@
 ### Deprecated
 - **Legacy decoder API (arity-1 decoders)** will be removed in v1.0.0
   - Runtime deprecation warnings emitted when registering old-style decoders
-  - Migration guide: https://hexdocs.pm/pcap_file_ex/decoder-migration.html
+  - Migration guide: See "Migration Guide" section below
 
 ### Migration Guide
 

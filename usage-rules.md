@@ -391,6 +391,36 @@ if :http in packet.protocols do
 end
 ```
 
+### Custom Protocol Decoders
+
+Register custom application-layer protocol decoders using **DecoderRegistry** (v0.5.0+):
+
+```elixir
+# Register a custom decoder with context passing (new API)
+PcapFileEx.DecoderRegistry.register(%{
+  protocol: :my_protocol,
+  matcher: fn layers, payload ->
+    if my_protocol?(layers) do
+      # Return context to decoder (thread-safe, efficient)
+      {:match, extract_context(layers)}
+    else
+      false
+    end
+  end,
+  decoder: fn context, payload ->
+    # Use context from matcher (no double-decode!)
+    {:ok, decode_with_context(payload, context)}
+  end,
+  fields: [...]
+})
+
+# Now packets are automatically decoded
+packet = PcapFileEx.Packet.decode_registered(packet)
+# => {:ok, {:my_protocol, decoded_data}}
+```
+
+**See [Decoder Registry Guide](usage-rules/decoder-registry.md) for complete patterns and migration guide.**
+
 ## When to Use Each Module
 
 ### PcapFileEx (Main API - Use This!)
@@ -442,6 +472,14 @@ end
 - TCP stream reassembly
 - `stream_http_messages/2` for fragmented HTTP
 - Handles out-of-order packets
+
+### PcapFileEx.DecoderRegistry
+- Register custom application-layer protocol decoders
+- Extend protocol support beyond built-in HTTP
+- **Use new context-passing API (v0.5.0+)** for thread-safety and performance
+- Matchers return `{:match, context}` instead of booleans
+- Decoders receive `(context, payload)` for clean data flow
+- See [Decoder Registry Guide](usage-rules/decoder-registry.md) for complete guide
 
 ## Security Considerations
 
@@ -629,6 +667,7 @@ DateTime.compare(packet.timestamp, some_datetime)  # => :lt
 - [Performance Guide](usage-rules/performance.md) - Detailed performance optimization
 - [Filtering Guide](usage-rules/filtering.md) - Complete filtering reference
 - [HTTP Guide](usage-rules/http.md) - HTTP decoding patterns
+- [Decoder Registry Guide](usage-rules/decoder-registry.md) - Custom protocol decoders with context passing
 - [Format Guide](usage-rules/formats.md) - PCAP vs PCAPNG differences
 - [Merging Guide](usage-rules/merging.md) - Multi-file chronological merge patterns
 - [Writing Guide](usage-rules/writing.md) - Creating and exporting PCAP files
