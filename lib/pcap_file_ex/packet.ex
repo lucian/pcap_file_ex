@@ -373,7 +373,6 @@ defmodule PcapFileEx.Packet do
       case safe_match?(entry, layers, payload) do
         {:match, context} -> {:ok, {entry, context}}
         false -> nil
-        _ -> nil
       end
     end)
     |> case do
@@ -390,7 +389,6 @@ defmodule PcapFileEx.Packet do
       # Old API (backward compat)
       true -> {:match, nil}
       false -> false
-      _ -> false
     end
   rescue
     _ -> false
