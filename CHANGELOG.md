@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.5.1] - 2025-12-01
+- dependencies updates
+
 ## [0.5.0] - 2025-11-19
 
 ⚠️ **BREAKING CHANGES** - Decoder Registry API Enhanced with Context Passing
