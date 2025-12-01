@@ -1,7 +1,7 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.5.0"
+  @version "0.5.1-dev"
   @source_url "https://github.com/lucian/pcap_file_ex"
   @dev? String.ends_with?(@version, "-dev")
   @force_build? System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]
@@ -308,7 +308,7 @@ defmodule PcapFileEx.MixProject do
       {:jason, "~> 1.4", optional: true},
       {:benchee, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
-      {:igniter, "~> 0.7.0"},
+      {:igniter, "~> 0.7.0", only: [:dev, :test]},
       {:stream_data, "~> 1.2", only: [:dev, :test], runtime: false},
       {:tidewave, "~> 0.5.1", only: :dev},
       {:bandit, "~> 1.0", only: :dev},

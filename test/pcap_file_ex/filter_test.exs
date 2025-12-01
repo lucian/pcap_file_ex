@@ -17,7 +17,7 @@ defmodule PcapFileEx.FilterTest do
         |> Filter.by_size(60..70)
         |> Enum.to_list()
 
-      assert length(filtered) > 0
+      refute Enum.empty?(filtered)
 
       Enum.each(filtered, fn packet ->
         size = byte_size(packet.data)
@@ -33,7 +33,7 @@ defmodule PcapFileEx.FilterTest do
         |> Filter.larger_than(100)
         |> Enum.to_list()
 
-      assert length(filtered) > 0
+      refute Enum.empty?(filtered)
 
       Enum.each(filtered, fn packet ->
         assert byte_size(packet.data) > 100
@@ -48,7 +48,7 @@ defmodule PcapFileEx.FilterTest do
         |> Filter.smaller_than(70)
         |> Enum.to_list()
 
-      assert length(filtered) > 0
+      refute Enum.empty?(filtered)
 
       Enum.each(filtered, fn packet ->
         assert byte_size(packet.data) < 70
@@ -63,7 +63,7 @@ defmodule PcapFileEx.FilterTest do
         |> Filter.by_protocol(:tcp)
         |> Enum.to_list()
 
-      assert length(filtered) > 0
+      refute Enum.empty?(filtered)
 
       Enum.each(filtered, fn packet ->
         assert {:ok, {layers, _payload}} = Packet.pkt_decode(packet)
@@ -77,7 +77,7 @@ defmodule PcapFileEx.FilterTest do
         |> Filter.by_protocol(:http)
         |> Enum.to_list()
 
-      assert length(http_packets) > 0
+      refute Enum.empty?(http_packets)
 
       Enum.each(http_packets, fn packet ->
         assert {:ok, {layers, payload}} = Packet.pkt_decode(packet)
@@ -155,7 +155,7 @@ defmodule PcapFileEx.FilterTest do
         |> Enum.to_list()
 
       # Our test capture contains HTTP traffic
-      assert length(filtered) > 0
+      refute Enum.empty?(filtered)
     end
   end
 
@@ -169,7 +169,7 @@ defmodule PcapFileEx.FilterTest do
         end)
         |> Enum.to_list()
 
-      assert length(filtered) > 0
+      refute Enum.empty?(filtered)
 
       Enum.each(filtered, fn packet ->
         assert rem(byte_size(packet.data), 2) == 0

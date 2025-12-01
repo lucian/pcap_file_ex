@@ -25,7 +25,7 @@ defmodule PcapFileEx.TimestampPrecisionTest do
 
           # Verify packets can be read
           {:ok, packets} = PcapFileEx.Pcap.read_all("test/fixtures/new_test.pcap")
-          assert length(packets) > 0
+          refute Enum.empty?(packets)
           assert Enum.all?(packets, fn p -> is_struct(p, PcapFileEx.Packet) end)
 
         false ->
@@ -63,7 +63,7 @@ defmodule PcapFileEx.TimestampPrecisionTest do
 
       # Verify we can read packets
       {:ok, packets} = PcapFileEx.Pcap.read_all("test/fixtures/linux_new_test.pcap")
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
       assert Enum.all?(packets, fn p -> is_struct(p, PcapFileEx.Packet) end)
 
       # Verify timestamps are present
@@ -114,7 +114,7 @@ defmodule PcapFileEx.TimestampPrecisionTest do
       assert is_struct(reader, PcapFileEx.PcapNg)
 
       {:ok, packets} = PcapFileEx.PcapNg.read_all("test/fixtures/linux_new_test.pcapng")
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
     end
 
     @tag :pcapng
@@ -134,7 +134,7 @@ defmodule PcapFileEx.TimestampPrecisionTest do
           assert is_struct(reader, PcapFileEx.PcapNg)
 
           {:ok, packets} = PcapFileEx.PcapNg.read_all("test/fixtures/new_test.pcapng")
-          assert length(packets) > 0
+          refute Enum.empty?(packets)
 
         false ->
           :ok
@@ -171,7 +171,7 @@ defmodule PcapFileEx.TimestampPrecisionTest do
       # Both files should have similar packet structures
       {:ok, linux_packets} = PcapFileEx.Pcap.read_all("test/fixtures/linux_new_test.pcap")
 
-      assert length(linux_packets) > 0
+      refute Enum.empty?(linux_packets)
       assert Enum.all?(linux_packets, fn p -> byte_size(p.data) > 0 end)
       assert Enum.all?(linux_packets, fn p -> is_struct(p.timestamp, DateTime) end)
     end

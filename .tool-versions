@@ -1,5 +1,5 @@
-erlang 28.1.1
-elixir 1.19.2-otp-28
+erlang 28.2
+elixir 1.19.4-otp-28
 nodejs 24.1.0
 python 3.13.5
 rust 1.91.0

@@ -13,7 +13,7 @@ defmodule PcapFileEx.StreamTest do
 
       packets = Stream.from_reader!(reader) |> Enum.to_list()
 
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
       assert Enum.all?(packets, &is_struct(&1, PcapFileEx.Packet))
 
       Pcap.close(reader)
@@ -42,7 +42,7 @@ defmodule PcapFileEx.StreamTest do
 
       packets = Stream.from_reader!(reader) |> Enum.to_list()
 
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
       assert Enum.all?(packets, &is_struct(&1, PcapFileEx.Packet))
 
       PcapNg.close(reader)
@@ -203,7 +203,7 @@ defmodule PcapFileEx.StreamTest do
         end)
 
       assert is_list(result)
-      assert length(result) > 0
+      refute Enum.empty?(result)
     end
   end
 
@@ -284,7 +284,7 @@ defmodule PcapFileEx.StreamTest do
       # We should have collected some valid packets
       assert length(packets) >= 0
       # And at least one error
-      assert length(errors) > 0
+      refute Enum.empty?(errors)
     end
   end
 
@@ -391,7 +391,7 @@ defmodule PcapFileEx.StreamTest do
       stream = Stream.packets!(@pcap_fixture)
       packets = Enum.to_list(stream)
 
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
       assert Enum.all?(packets, &is_struct(&1, PcapFileEx.Packet))
     end
   end
@@ -414,7 +414,7 @@ defmodule PcapFileEx.StreamTest do
 
       packets = Stream.from_reader!(reader) |> Enum.to_list()
 
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
       assert Enum.all?(packets, &is_struct(&1, PcapFileEx.Packet))
 
       Pcap.close(reader)

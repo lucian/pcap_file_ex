@@ -46,7 +46,7 @@ defmodule PcapFileEx.DecoderRegistryIntegrationTest do
         |> Enum.filter(&match?({:ok, {:tcp_with_port, _}}, &1))
 
       # Should find at least some TCP packets
-      assert length(decoded_packets) > 0
+      refute Enum.empty?(decoded_packets)
 
       # Verify context was passed correctly
       for {:ok, {:tcp_with_port, decoded}} <- decoded_packets do
@@ -102,7 +102,7 @@ defmodule PcapFileEx.DecoderRegistryIntegrationTest do
         |> Enum.filter(&match?({:ok, {:layer_context_test, _}}, &1))
 
       # Should find TCP packets with IP information
-      assert length(decoded_packets) > 0
+      refute Enum.empty?(decoded_packets)
 
       # Verify all context fields are present
       for {:ok, {:layer_context_test, decoded}} <- decoded_packets do

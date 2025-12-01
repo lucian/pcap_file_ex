@@ -85,7 +85,7 @@ defmodule PcapFileEx.PcapNgTest do
             {:error, _} -> false
           end)
 
-        assert length(result) > 0
+        refute Enum.empty?(result)
 
         # Next read should be EOF
         assert :eof = PcapNg.next_packet(reader)
@@ -100,7 +100,7 @@ defmodule PcapFileEx.PcapNgTest do
       if File.exists?(@test_pcapng_file) do
         assert {:ok, packets} = PcapNg.read_all(@test_pcapng_file)
         assert is_list(packets)
-        assert length(packets) > 0
+        refute Enum.empty?(packets)
 
         # Verify all packets are valid
         Enum.each(packets, fn packet ->

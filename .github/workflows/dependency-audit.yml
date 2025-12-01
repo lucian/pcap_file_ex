@@ -23,8 +23,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 28.1.1
-          elixir-version: 1.19.2
+          otp-version: 28.2
+          elixir-version: 1.19.4
 
       - uses: dtolnay/rust-toolchain@stable
 

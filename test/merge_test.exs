@@ -19,7 +19,7 @@ defmodule PcapFileEx.MergeTest do
       packets = Enum.to_list(stream)
 
       # Should have packets from both files
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
 
       # Verify chronological order
       assert_chronological_order(packets)
@@ -30,7 +30,7 @@ defmodule PcapFileEx.MergeTest do
 
       packets = Enum.to_list(stream)
 
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
       assert_chronological_order(packets)
     end
 

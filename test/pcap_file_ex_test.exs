@@ -31,7 +31,7 @@ defmodule PcapFileExTest do
     test "preserves nanosecond precision in timestamp_precise field" do
       if File.exists?(@test_pcapng_nanosec) do
         assert {:ok, packets} = PcapFileEx.read_all(@test_pcapng_nanosec)
-        assert length(packets) > 0
+        refute Enum.empty?(packets)
 
         first = List.first(packets)
 

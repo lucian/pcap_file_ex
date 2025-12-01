@@ -26,7 +26,7 @@ defmodule PcapFileEx.WriterSmokeTest do
     test "can write packets to PCAP file", %{test_file: test_file, output_pcap: output_pcap} do
       # Read packets from test file
       {:ok, packets} = PcapFileEx.read_all(test_file)
-      assert length(packets) > 0, "Test file should have packets"
+      refute Enum.empty?(packets), "Test file should have packets"
 
       # Get header
       {:ok, reader} = PcapFileEx.Pcap.open(test_file)
@@ -50,7 +50,7 @@ defmodule PcapFileEx.WriterSmokeTest do
     } do
       # Read packets from test file
       {:ok, packets} = PcapFileEx.read_all(test_file)
-      assert length(packets) > 0
+      refute Enum.empty?(packets)
 
       # Create interface from header
       {:ok, reader} = PcapFileEx.Pcap.open(test_file)

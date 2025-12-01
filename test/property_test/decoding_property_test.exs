@@ -238,7 +238,7 @@ defmodule PcapFileEx.DecodingPropertyTest do
       protocols = Packet.known_protocols()
 
       assert is_list(protocols)
-      assert length(protocols) > 0
+      refute Enum.empty?(protocols)
 
       Enum.all?(protocols, fn proto ->
         assert is_atom(proto), "all known protocols should be atoms"
