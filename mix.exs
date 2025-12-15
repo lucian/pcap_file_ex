@@ -305,6 +305,7 @@ defmodule PcapFileEx.MixProject do
       {:rustler, "~> 0.37.1", optional: not (@dev? or @force_build?)},
       {:rustler_precompiled, "~> 0.8"},
       {:pkt, "~> 0.6.0"},
+      {:hpax, "~> 1.0"},
       {:jason, "~> 1.4", optional: true},
       {:benchee, "~> 1.3", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},

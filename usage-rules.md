@@ -473,6 +473,17 @@ packet = PcapFileEx.Packet.decode_registered(packet)
 - `stream_http_messages/2` for fragmented HTTP
 - Handles out-of-order packets
 
+### PcapFileEx.HTTP2
+- HTTP/2 cleartext (h2c) stream reconstruction
+- `analyze/2` for PCAP file analysis with options:
+  - `:port` - Filter to specific TCP port
+  - `:decode_content` - Auto-decode bodies based on Content-Type (default: true)
+- Returns complete and incomplete exchanges with `decoded_body` field
+- Automatic body decoding: JSON, text, multipart/*, binary fallback
+- Supports mid-connection captures (with limitations)
+- **Cleartext only** - no TLS/h2 support
+- See [HTTP/2 Guide](usage-rules/http2.md) for content decoding patterns
+
 ### PcapFileEx.DecoderRegistry
 - Register custom application-layer protocol decoders
 - Extend protocol support beyond built-in HTTP
@@ -666,7 +677,8 @@ DateTime.compare(packet.timestamp, some_datetime)  # => :lt
 
 - [Performance Guide](usage-rules/performance.md) - Detailed performance optimization
 - [Filtering Guide](usage-rules/filtering.md) - Complete filtering reference
-- [HTTP Guide](usage-rules/http.md) - HTTP decoding patterns
+- [HTTP Guide](usage-rules/http.md) - HTTP/1.x decoding patterns
+- [HTTP/2 Guide](usage-rules/http2.md) - HTTP/2 cleartext (h2c) analysis
 - [Decoder Registry Guide](usage-rules/decoder-registry.md) - Custom protocol decoders with context passing
 - [Format Guide](usage-rules/formats.md) - PCAP vs PCAPNG differences
 - [Merging Guide](usage-rules/merging.md) - Multi-file chronological merge patterns

@@ -17,6 +17,7 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **Cross-Platform** - Works with PCAP files from macOS (microsecond) and Linux (nanosecond) without conversion
 - ✅ **TCP Reassembly** - Reassemble HTTP messages split across multiple TCP packets
 - ✅ **HTTP Body Decoding** - Automatic decoding of JSON, ETF, form data, and text bodies
+- ✅ **HTTP/2 Analysis** - Reconstruct HTTP/2 cleartext (h2c) request/response exchanges from PCAP files
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
 - ✅ **Multi-File Merge** - Merge multiple captures by nanosecond-precision timestamps with clock validation
@@ -1457,6 +1458,57 @@ end)
 
 Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly from TCP payloads.
 
+### HTTP/2 Analysis
+
+Analyze HTTP/2 cleartext (h2c) traffic to reconstruct complete request/response exchanges:
+
+```elixir
+# Analyze PCAP file for HTTP/2 exchanges
+{:ok, complete, incomplete} = PcapFileEx.HTTP2.analyze("capture.pcap")
+
+# Print complete exchanges
+Enum.each(complete, fn ex ->
+  IO.puts("#{ex.request.method} #{ex.request.path} -> #{ex.response.status}")
+end)
+
+# Filter by port for h2c traffic
+{:ok, complete, _} = PcapFileEx.HTTP2.analyze("capture.pcap", port: 8080)
+
+# Find error responses
+errors = Enum.filter(complete, fn ex -> ex.response.status >= 400 end)
+
+# Access request/response details
+exchange = hd(complete)
+exchange.request.method      # "GET"
+exchange.request.path        # "/api/users"
+exchange.response.status     # 200
+exchange.response.body       # "{\"users\": [...]}"
+
+# Access auto-decoded body (based on Content-Type)
+case exchange.response.decoded_body do
+  {:json, data} -> IO.inspect(data)  # Parsed JSON
+  {:text, text} -> IO.puts(text)     # UTF-8 text
+  {:multipart, parts} -> Enum.each(parts, &IO.inspect/1)  # Multipart parts
+  {:binary, bin} -> IO.puts("Binary: #{byte_size(bin)} bytes")
+  nil -> IO.puts("No body")
+end
+
+# Disable content decoding for raw binary access
+{:ok, complete, _} = PcapFileEx.HTTP2.analyze("capture.pcap", decode_content: false)
+
+# Check incomplete exchanges (RST_STREAM, GOAWAY, truncated)
+Enum.each(incomplete, fn ex ->
+  IO.puts("Stream #{ex.stream_id}: #{inspect(ex.reason)}")
+end)
+```
+
+**Limitations:**
+- **Cleartext only**: No TLS-encrypted HTTP/2 (h2) support
+- **Prior-knowledge h2c**: No HTTP/1.1 Upgrade flow support
+- **Analysis only**: No playback server implementation
+
+See [HTTP/2 Guide](usage-rules/http2.md) for complete patterns and best practices.
+
 ### Header
 
 ```elixir
@@ -1571,11 +1623,12 @@ PcapFileEx.stream!("huge_10gb.pcap")
 - [x] Nanosecond timestamp precision support
 - [x] **Multi-file timeline merge** - Chronologically merge multiple PCAP/PCAPNG files with nanosecond precision, interface remapping, source annotation, and clock validation
 - [x] **PCAP/PCAPNG writer API** - Create, export, filter, and convert captures with format auto-detection, timestamp manipulation, and streaming writes (v0.4.0)
+- [x] **HTTP/2 cleartext analysis** - Reconstruct HTTP/2 (h2c) request/response exchanges with HPACK header decompression
 
 ### Planned Features
 - [ ] **Display filter → PreFilter compiler** - Convert Wireshark-style display filters into PreFilter tuples for familiar syntax
 - [ ] **Telemetry hooks** - Emit `:telemetry` events for packet decode, HTTP parsing, and PreFilter hits for observability
-- [ ] **Higher-level protocol decoders** - TLS, DNS (enhanced), HTTP/2 decoders as optional dependencies
+- [ ] **Higher-level protocol decoders** - TLS, DNS (enhanced) decoders as optional dependencies
 
 ## Troubleshooting
 

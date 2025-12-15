@@ -1,0 +1,4 @@
+# Python dependencies for HTTP/2 test fixture generation
+# Install with: pip install -r requirements.txt
+
+h2>=4.0.0

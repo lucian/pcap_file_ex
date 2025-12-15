@@ -2,6 +2,43 @@
 
 ## [0.5.2-dev] - Unreleased
 
+### Added
+- **Automatic Content-Type based body decoding for HTTP/2 exchanges**
+  - New `PcapFileEx.HTTP.Content` module for generic content decoding
+  - Supports JSON, text (UTF-8/ISO-8859-1), multipart/*, binary fallback
+  - Request and response bodies automatically decoded based on Content-Type header
+  - New `decoded_body` field in HTTP/2 Exchange request/response structs
+  - New `:decode_content` option for `HTTP2.analyze/2` and `analyze_segments/2` (default: true)
+  - Multipart/related support with recursive part decoding
+  - Comprehensive test suite: 42 unit tests + 21 property tests
+- **HTTP/2 Cleartext (h2c) Analysis** - Reconstruct HTTP/2 request/response exchanges from PCAP files
+  - New `PcapFileEx.HTTP2` module with public API
+    - `HTTP2.analyze/2` - Analyze PCAP file for HTTP/2 exchanges (options: `:port`, `:decode_content`)
+    - `HTTP2.analyze_segments/2` - Analyze pre-parsed TCP segments (options: `:decode_content`)
+    - `HTTP2.http2?/1` - Detect HTTP/2 connection preface
+    - `HTTP2.connection_preface/0` - Get preface string
+  - New submodules for HTTP/2 protocol handling:
+    - `HTTP2.Frame` - Frame parsing with padding and priority handling
+    - `HTTP2.FrameBuffer` - Cross-packet frame reassembly
+    - `HTTP2.Headers` - Pseudo/regular header separation with trailer support
+    - `HTTP2.StreamState` - Per-stream state with CONTINUATION handling
+    - `HTTP2.Connection` - Dual HPACK tables per direction with SETTINGS
+    - `HTTP2.Analyzer` - Main stream reconstruction algorithm
+    - `HTTP2.Exchange` - Complete request/response pair struct
+    - `HTTP2.IncompleteExchange` - Partial exchange with reason tracking
+  - Returns complete and incomplete exchanges separately
+  - Supports mid-connection captures (with HPACK limitations)
+  - HPACK header decompression via `hpax` library
+  - TCP sequence number ordering and retransmission detection
+  - Handles RST_STREAM, GOAWAY, and truncated streams
+  - **Limitations**: Cleartext only (no TLS), prior-knowledge h2c only (no HTTP/1.1 Upgrade)
+  - Comprehensive test suite:
+    - Unit tests for Frame, FrameBuffer, Headers modules
+    - Property-based tests (22 properties) for frame parsing and headers
+    - Integration tests (16 tests) including real PCAP file analysis
+  - New dependency: `{:hpax, "~> 1.0"}` for HPACK decompression
+  - Documentation: `usage-rules/http2.md` guide with patterns and best practices
+
 ### Changed
 - Updated dependencies:
   - bandit 1.8.0 → 1.9.0
