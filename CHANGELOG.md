@@ -39,6 +39,9 @@
   - New dependency: `{:hpax, "~> 1.0"}` for HPACK decompression
   - Documentation: `usage-rules/http2.md` guide with patterns and best practices
 
+### Breaking
+- **Dropped Intel Mac (`x86_64-apple-darwin`) precompiled binaries** - Apple Silicon (`aarch64-apple-darwin`) remains supported. Intel Mac users can compile from source with `PCAP_FILE_EX_BUILD=1` or stay on v0.5.1.
+
 ### Changed
 - Updated dependencies:
   - bandit 1.8.0 → 1.9.0

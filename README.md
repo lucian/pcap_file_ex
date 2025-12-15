@@ -34,7 +34,6 @@ PcapFileEx ships with precompiled NIFs for the following platforms (inspired by 
 - **Linux (ARM64)**: `aarch64-unknown-linux-gnu` - Raspberry Pi 4/5, ARM servers
 
 ### x86_64 Architectures
-- **macOS (Intel)**: `x86_64-apple-darwin` - Intel-based Macs
 - **Linux (Intel/AMD)**: `x86_64-unknown-linux-gnu` - Ubuntu, Debian, Fedora, RHEL, etc.
 - **Windows (MSVC)**: `x86_64-pc-windows-msvc` - Visual Studio toolchain
 - **Windows (GNU)**: `x86_64-pc-windows-gnu` - MinGW/MSYS2 toolchain
@@ -52,7 +51,7 @@ For x86_64 platforms (Linux, Windows, FreeBSD), two binary variants are availabl
    - Automatically selected on Linux based on CPU detection
    - Manually enable with: `PCAP_FILE_EX_USE_LEGACY_ARTIFACTS=1`
 
-**Total precompiled binaries: 11** (7 base targets + 4 legacy variants)
+**Total precompiled binaries: 10** (6 base targets + 4 legacy variants)
 
 ### Build from Source
 
@@ -64,6 +63,9 @@ PCAP_FILE_EX_BUILD=1 mix deps.compile pcap_file_ex
 ```
 
 **Requirements:** Rust toolchain (cargo, rustc) - tested with 1.91.0+
+
+> **Intel Mac Users:** Precompiled binaries for `x86_64-apple-darwin` were removed in v0.5.2.
+> You can either compile from source using `PCAP_FILE_EX_BUILD=1` or stay on v0.5.1.
 
 ## Installation
 
