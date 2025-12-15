@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.2-dev] - Unreleased
+
+### Changed
+- Updated dependencies:
+  - bandit 1.8.0 → 1.9.0
+  - ex_doc 0.39.1 → 0.39.3
+  - rustler_precompiled 0.8.3 → 0.8.4
+  - plug 1.18.1 → 1.19.1 (transitive)
+  - thousand_island 1.4.2 → 1.4.3 (transitive)
+  - castore 1.0.16 → 1.0.17 (transitive)
+
 ## [0.5.1] - 2025-12-01
 - dependencies updates
 
