@@ -452,8 +452,6 @@ defmodule PcapFileEx.HTTP2.Analyzer do
     %{exchange | request: request, response: response}
   end
 
-  defp decode_body(nil), do: nil
-
   defp decode_body(%{headers: headers, body: body} = data) do
     content_type = Headers.get(headers, "content-type")
     decoded = Content.decode(content_type, body)

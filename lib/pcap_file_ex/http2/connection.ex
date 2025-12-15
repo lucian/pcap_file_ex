@@ -92,6 +92,7 @@ defmodule PcapFileEx.HTTP2.Connection do
 
   The flow_key should be normalized (e.g., endpoints sorted consistently).
   """
+  @dialyzer {:nowarn_function, new: 1}
   @spec new({endpoint(), endpoint()}) :: t()
   def new(flow_key) do
     %__MODULE__{

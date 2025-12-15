@@ -32,7 +32,10 @@ defmodule PcapFileEx.MixProject do
         plt_file: {:no_warn, "priv/plts/project.plt"},
         plt_add_deps: :app_tree,
         paths: ["_build/#{Mix.env()}/lib/pcap_file_ex/ebin"]
-      ]
+      ],
+
+      # Test configuration - ignore fixture files that aren't tests
+      test_ignore_filters: [~r/test\/fixtures\/.+\.exs?$/]
     ]
   end
 

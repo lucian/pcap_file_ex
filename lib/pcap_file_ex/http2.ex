@@ -150,9 +150,9 @@ defmodule PcapFileEx.HTTP2 do
   # Decode a packet to extract TCP segment info
   # Tries pkt library first, falls back to raw parsing for null/loopback captures
   defp decode_packet(packet) do
-    case :pkt.decode(packet.data) do
-      {headers, _rest} when is_list(headers) ->
-        case extract_tcp_info(headers) do
+    case PcapFileEx.Packet.pkt_decode(packet) do
+      {:ok, {layers, payload}} when is_list(layers) and is_binary(payload) ->
+        case extract_tcp_info(layers, payload) do
           {:ok, segment_info} ->
             [Map.put(segment_info, :timestamp, packet.timestamp)]
 
@@ -303,44 +303,39 @@ defmodule PcapFileEx.HTTP2 do
 
   defp parse_tcp_segment(_, _, _), do: :skip
 
-  # Extract TCP info from pkt-decoded headers
-  defp extract_tcp_info(headers) do
-    ip_header = find_header(headers, :ipv4) || find_header(headers, :ipv6)
-    tcp_header = find_header(headers, :tcp)
+  # Extract TCP info from pkt-decoded layers and payload
+  defp extract_tcp_info(layers, payload) do
+    ip_header = find_header(layers, :ipv4) || find_header(layers, :ipv6)
+    tcp_header = find_header(layers, :tcp)
 
-    if ip_header && tcp_header do
+    if ip_header && tcp_header && byte_size(payload) > 0 do
       src_ip = elem(ip_header, 1)
       dst_ip = elem(ip_header, 2)
       src_port = elem(tcp_header, 1)
       dst_port = elem(tcp_header, 2)
       # TCP record: {tcp, sport, dport, seqno, ackno, ...}
       seq_num = if tuple_size(tcp_header) > 3, do: elem(tcp_header, 3), else: 0
-      payload = elem(tcp_header, tuple_size(tcp_header) - 1)
 
-      if is_binary(payload) and byte_size(payload) > 0 do
-        src_endpoint = {src_ip, src_port}
-        dst_endpoint = {dst_ip, dst_port}
+      src_endpoint = {src_ip, src_port}
+      dst_endpoint = {dst_ip, dst_port}
 
-        # Normalize flow key (smaller endpoint first for consistency)
-        {flow_key, direction} =
-          if src_endpoint <= dst_endpoint do
-            {{src_endpoint, dst_endpoint}, :a_to_b}
-          else
-            {{dst_endpoint, src_endpoint}, :b_to_a}
-          end
+      # Normalize flow key (smaller endpoint first for consistency)
+      {flow_key, direction} =
+        if src_endpoint <= dst_endpoint do
+          {{src_endpoint, dst_endpoint}, :a_to_b}
+        else
+          {{dst_endpoint, src_endpoint}, :b_to_a}
+        end
 
-        {:ok,
-         %{
-           flow_key: flow_key,
-           direction: direction,
-           data: payload,
-           src_port: src_port,
-           dst_port: dst_port,
-           seq_num: seq_num
-         }}
-      else
-        :skip
-      end
+      {:ok,
+       %{
+         flow_key: flow_key,
+         direction: direction,
+         data: payload,
+         src_port: src_port,
+         dst_port: dst_port,
+         seq_num: seq_num
+       }}
     else
       :skip
     end
@@ -352,8 +347,6 @@ defmodule PcapFileEx.HTTP2 do
       _ -> false
     end)
   end
-
-  defp find_header(_, _), do: nil
 
   # Check if segment matches port filter
   defp segment_matches_port?(segment, port) do
