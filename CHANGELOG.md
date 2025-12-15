@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.2-dev] - Unreleased
+## [0.5.2] - 2025-12-15
 
 ### Added
 - **Automatic Content-Type based body decoding for HTTP/2 exchanges**
