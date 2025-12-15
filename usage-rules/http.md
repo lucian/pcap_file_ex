@@ -546,7 +546,7 @@ PcapFileEx.DecoderRegistry.register(%{
 })
 ```
 
-**See [Decoder Registry Guide](decoder-registry.md) for complete context-passing patterns.**
+**See the `PcapFileEx.DecoderRegistry` module documentation for complete context-passing patterns.**
 
 ## Common Mistakes
 

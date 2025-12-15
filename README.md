@@ -194,7 +194,7 @@ git push --no-verify
 
 2. **Explore the examples** in this README
 
-3. **Read the architecture** in the [CLAUDE.md](CLAUDE.md) file
+3. **Read the architecture** in the project's development documentation
 
 4. **Check the roadmap** to see what's planned
 
@@ -1509,7 +1509,7 @@ end)
 - **Prior-knowledge h2c**: No HTTP/1.1 Upgrade flow support
 - **Analysis only**: No playback server implementation
 
-See [HTTP/2 Guide](usage-rules/http2.md) for complete patterns and best practices.
+See the `PcapFileEx.HTTP2` module documentation for complete patterns and best practices.
 
 ### Header
 

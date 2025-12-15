@@ -855,7 +855,7 @@ DecoderRegistry.register(%{
 })
 ```
 
-**See [Decoder Registry Guide](decoder-registry.md) for complete patterns and best practices.**
+**See the `PcapFileEx.DecoderRegistry` module documentation for complete patterns and best practices.**
 
 ## Summary: Key Patterns
 

@@ -1,7 +1,7 @@
 defmodule PcapFileEx.MixProject do
   use Mix.Project
 
-  @version "0.5.2"
+  @version "0.5.3-dev"
   @source_url "https://github.com/lucian/pcap_file_ex"
   @dev? String.ends_with?(@version, "-dev")
   @force_build? System.get_env("PCAP_FILE_EX_BUILD") in ["1", "true"]
@@ -112,7 +112,7 @@ defmodule PcapFileEx.MixProject do
       "rust.fmt": ["cmd cargo fmt --manifest-path=native/pcap_file_ex/Cargo.toml --all"],
       "deps.check": [&check_deps_tools/1, "hex.outdated", &check_cargo_outdated/1],
       "check.doctor": [&run_doctor_checks/1],
-      ci: ["format", "rust.fmt", "rust.lint", "test"],
+      ci: ["format", "rust.fmt", "rust.lint", "docs --warnings-as-errors", "test"],
       tidewave:
         "run --no-halt -e 'Agent.start(fn -> Bandit.start_link(plug: Tidewave, port: 4000) end)'",
       "tidewave-iex":

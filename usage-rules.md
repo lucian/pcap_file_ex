@@ -419,7 +419,7 @@ packet = PcapFileEx.Packet.decode_registered(packet)
 # => {:ok, {:my_protocol, decoded_data}}
 ```
 
-**See [Decoder Registry Guide](usage-rules/decoder-registry.md) for complete patterns and migration guide.**
+**See the `PcapFileEx.DecoderRegistry` module documentation for complete patterns.**
 
 ## When to Use Each Module
 
@@ -482,7 +482,7 @@ packet = PcapFileEx.Packet.decode_registered(packet)
 - Automatic body decoding: JSON, text, multipart/*, binary fallback
 - Supports mid-connection captures (with limitations)
 - **Cleartext only** - no TLS/h2 support
-- See [HTTP/2 Guide](usage-rules/http2.md) for content decoding patterns
+- See `PcapFileEx.HTTP2` module documentation for content decoding patterns
 
 ### PcapFileEx.DecoderRegistry
 - Register custom application-layer protocol decoders
@@ -490,7 +490,7 @@ packet = PcapFileEx.Packet.decode_registered(packet)
 - **Use new context-passing API (v0.5.0+)** for thread-safety and performance
 - Matchers return `{:match, context}` instead of booleans
 - Decoders receive `(context, payload)` for clean data flow
-- See [Decoder Registry Guide](usage-rules/decoder-registry.md) for complete guide
+- See `PcapFileEx.DecoderRegistry` module documentation for complete guide
 
 ## Security Considerations
 
@@ -678,9 +678,9 @@ DateTime.compare(packet.timestamp, some_datetime)  # => :lt
 - [Performance Guide](usage-rules/performance.md) - Detailed performance optimization
 - [Filtering Guide](usage-rules/filtering.md) - Complete filtering reference
 - [HTTP Guide](usage-rules/http.md) - HTTP/1.x decoding patterns
-- [HTTP/2 Guide](usage-rules/http2.md) - HTTP/2 cleartext (h2c) analysis
-- [Decoder Registry Guide](usage-rules/decoder-registry.md) - Custom protocol decoders with context passing
 - [Format Guide](usage-rules/formats.md) - PCAP vs PCAPNG differences
-- [Merging Guide](usage-rules/merging.md) - Multi-file chronological merge patterns
-- [Writing Guide](usage-rules/writing.md) - Creating and exporting PCAP files
 - [Examples](usage-rules/examples.md) - Complete working examples
+- `PcapFileEx.HTTP2` - HTTP/2 cleartext (h2c) analysis
+- `PcapFileEx.DecoderRegistry` - Custom protocol decoders with context passing
+- `PcapFileEx.Merge` - Multi-file chronological merge patterns
+- `PcapFileEx.PcapWriter` / `PcapFileEx.PcapNgWriter` - Creating and exporting PCAP files

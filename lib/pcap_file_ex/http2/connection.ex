@@ -50,8 +50,9 @@ defmodule PcapFileEx.HTTP2.Connection do
           # HPACK decode tables (separate per direction)
           # server_decode_table: decodes client→server headers (requests)
           # client_decode_table: decodes server→client headers (responses)
-          server_decode_table: HPAX.Table.t(),
-          client_decode_table: HPAX.Table.t(),
+          # Note: Using term() as HPAX.Table is not a public module
+          server_decode_table: term(),
+          client_decode_table: term(),
 
           # Dual frame buffers (one per direction)
           a_to_b_buffer: FrameBuffer.t(),

@@ -118,6 +118,9 @@ jobs:
       - name: Run Dialyzer
         run: mix dialyzer --format github --format dialyxir
 
+      - name: Check documentation builds without warnings
+        run: mix docs --warnings-as-errors
+
   version-sync:
     name: Verify version synchronization
     runs-on: ubuntu-latest

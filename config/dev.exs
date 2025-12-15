@@ -24,7 +24,8 @@ config :git_hooks,
         {:mix_task, :dialyzer},
         {:cmd, "cargo clippy --manifest-path=native/pcap_file_ex/Cargo.toml -- -Dwarnings"},
         {:cmd,
-         "if command -v cargo-deny >/dev/null 2>&1; then cd native/pcap_file_ex && cargo deny check advisories licenses; else echo '⚠️  cargo-deny not installed. Run: mix setup'; fi"}
+         "if command -v cargo-deny >/dev/null 2>&1; then cd native/pcap_file_ex && cargo deny check advisories licenses; else echo '⚠️  cargo-deny not installed. Run: mix setup'; fi"},
+        {:mix_task, :docs, ["--warnings-as-errors"]}
       ]
     ]
   ]

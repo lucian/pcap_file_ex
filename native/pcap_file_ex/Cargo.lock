@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "pcap_file_ex"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "etherparse",
  "ipnetwork",

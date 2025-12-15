@@ -1,6 +1,6 @@
 [package]
 name = "pcap_file_ex"
-version = "0.5.2"
+version = "0.5.3"
 authors = ["Lucian Parvu"]
 edition = "2021"
 license = "MIT"
