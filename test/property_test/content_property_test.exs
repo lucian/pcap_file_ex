@@ -257,7 +257,9 @@ defmodule PcapFileEx.HTTP.ContentPropertyTest do
         # The result type should be consistent with content-type
         case result do
           {:json, val} ->
-            assert is_map(val) or is_list(val)
+            # JSON can decode to any valid JSON value: objects, arrays, strings, numbers, booleans, null
+            assert is_map(val) or is_list(val) or is_binary(val) or is_number(val) or
+                     is_boolean(val) or is_nil(val)
 
           {:text, val} ->
             assert is_binary(val)
