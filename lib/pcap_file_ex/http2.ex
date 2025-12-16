@@ -309,8 +309,15 @@ defmodule PcapFileEx.HTTP2 do
     tcp_header = find_header(layers, :tcp)
 
     if ip_header && tcp_header && byte_size(payload) > 0 do
-      src_ip = elem(ip_header, 1)
-      dst_ip = elem(ip_header, 2)
+      # pkt record structures:
+      # ipv4: {ipv4, ihl, dscp, ecn, tot_len, id, df, mf, frag_off, ttl, proto, checksum, src, dst, opts}
+      # ipv6: {ipv6, class, flow, len, next, hop, src, dst}
+      {src_ip, dst_ip} =
+        case elem(ip_header, 0) do
+          :ipv4 -> {elem(ip_header, 12), elem(ip_header, 13)}
+          :ipv6 -> {elem(ip_header, 6), elem(ip_header, 7)}
+        end
+
       src_port = elem(tcp_header, 1)
       dst_port = elem(tcp_header, 2)
       # TCP record: {tcp, sport, dport, seqno, ackno, ...}

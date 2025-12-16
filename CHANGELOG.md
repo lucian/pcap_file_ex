@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.3] - 2025-12-16
+
+### Fixed
+- **CRITICAL: HTTP/2 analysis with pkt-decoded packets** - Fixed incorrect IP address extraction from `pkt` library's IPv4/IPv6 record tuples. The code was reading `elem(ip_header, 1)` and `elem(ip_header, 2)` which returned IHL (4) and DSCP (5) header fields instead of actual IP addresses. This caused bidirectional TCP traffic to be split into two separate flows, resulting in all HTTP/2 exchanges being marked as incomplete (requests and responses tracked separately). Fixed to use correct tuple positions: `elem(ip_header, 12)` and `elem(ip_header, 13)` for IPv4, `elem(ip_header, 6)` and `elem(ip_header, 7)` for IPv6.
+
 ## [0.5.2] - 2025-12-15
 
 ### Added
