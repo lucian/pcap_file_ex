@@ -41,7 +41,7 @@ jobs:
           path: |
             ~/.cargo/bin/cargo-outdated
             ~/.cargo/bin/cargo-deny
-          key: cargo-tools-${{ runner.os }}-v1
+          key: cargo-tools-${{ runner.os }}-v2
 
       - name: Install cargo-binstall
         if: steps.cargo-tools-cache.outputs.cache-hit != 'true'
