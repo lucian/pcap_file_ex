@@ -226,6 +226,42 @@ defmodule PcapFileEx.HTTP2IntegrationTest do
       assert stream_3.reason == {:goaway, 1}
     end
 
+    test "GOAWAY after complete exchange does not mark it incomplete" do
+      # Regression test: A stream that has both END_STREAM on request and response
+      # should remain a complete Exchange even if GOAWAY is received afterward.
+      # See: capture_20251222_173359-broken-goaway.pcapng where stream 63 was
+      # incorrectly marked incomplete due to a client GOAWAY with last_stream_id=0.
+      flow_key = {{{127, 0, 0, 1}, 50_000}, {{127, 0, 0, 1}, 8080}}
+
+      request_headers = <<0x82, 0x84, 0x86>>
+      # Simple 204 response with :status pseudo-header
+      response_headers = <<0x89>>
+
+      segments = [
+        segment(flow_key, :a_to_b, @preface),
+        segment(flow_key, :a_to_b, frame(:settings, 0, 0, <<>>)),
+        segment(flow_key, :b_to_a, frame(:settings, 0, 0, <<>>)),
+        # Client sends complete request on stream 1 (END_STREAM + END_HEADERS)
+        segment(flow_key, :a_to_b, frame(:headers, 0x05, 1, request_headers)),
+        # Server sends complete 204 response (END_STREAM + END_HEADERS)
+        segment(flow_key, :b_to_a, frame(:headers, 0x05, 1, response_headers)),
+        # Client sends GOAWAY with last_stream_id=0 (after exchange is complete)
+        segment(flow_key, :a_to_b, frame(:goaway, 0, 0, <<0::1, 0::31, 0, 0, 0, 2>>)),
+        # Server sends GOAWAY with last_stream_id=1
+        segment(flow_key, :b_to_a, frame(:goaway, 0, 0, <<0::1, 1::31, 0, 0, 0, 0>>))
+      ]
+
+      {:ok, complete, incomplete} = Analyzer.analyze(segments)
+
+      # Stream 1 should be complete (both request and response had END_STREAM)
+      # even though GOAWAY with last_stream_id=0 was received afterward
+      assert length(complete) == 1
+      assert Enum.empty?(incomplete)
+
+      [exchange] = complete
+      assert exchange.stream_id == 1
+    end
+
     test "handles truncated stream" do
       flow_key = {{{127, 0, 0, 1}, 50_000}, {{127, 0, 0, 1}, 8080}}
 

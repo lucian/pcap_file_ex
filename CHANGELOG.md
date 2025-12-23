@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.4] - 2025-12-23
+
+### Fixed
+- **HTTP/2 GOAWAY incorrectly marking complete exchanges as incomplete** - Fixed a bug where streams that had fully completed (both request and response with END_STREAM flags) were incorrectly marked as `IncompleteExchange` if a GOAWAY frame was received afterward. The `process_goaway/2` function now checks if a stream is already complete before terminating it. Per RFC 7540, GOAWAY indicates streams that won't be processed, but streams already complete should remain complete - the GOAWAY is informational about why the connection closed, not a retroactive failure of completed exchanges.
+
 ## [0.5.3] - 2025-12-16
 
 ### Fixed

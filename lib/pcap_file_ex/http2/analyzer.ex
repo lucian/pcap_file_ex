@@ -257,9 +257,13 @@ defmodule PcapFileEx.HTTP2.Analyzer do
     <<_reserved::1, last_stream_id::31, _error_code::32, _debug::binary>> = frame.payload
     conn = Connection.set_goaway(conn, last_stream_id)
 
-    # Mark affected streams as terminated
+    # Mark affected streams as terminated, but only if they're not already complete.
+    # Streams that have both END_STREAM on request and response are complete exchanges
+    # and should not be marked incomplete just because a GOAWAY was received afterward.
     conn.streams
-    |> Enum.filter(fn {stream_id, _} -> stream_id > last_stream_id end)
+    |> Enum.filter(fn {stream_id, stream} ->
+      stream_id > last_stream_id and not StreamState.complete?(stream)
+    end)
     |> Enum.reduce(conn, fn {_stream_id, stream}, %Connection{} = acc ->
       updated_stream = StreamState.terminate(stream, {:goaway, last_stream_id})
       Connection.update_stream(acc, updated_stream)
