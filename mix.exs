@@ -314,7 +314,7 @@ defmodule PcapFileEx.MixProject do
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:igniter, "~> 0.7.0", only: [:dev, :test]},
       {:stream_data, "~> 1.2", only: [:dev, :test], runtime: false},
-      {:tidewave, "~> 0.5.1", only: :dev},
+      {:tidewave, "~> 0.5.3", only: :dev},
       {:bandit, "~> 1.0", only: :dev},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
