@@ -87,6 +87,10 @@ defmodule PcapFileEx.Stream do
   The stream halts after emitting an error tuple. To continue reading past
   errors or to get raising behavior, use `packets!/1` instead.
 
+  ## Options
+
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
+
   ## Examples
 
       # Basic usage with pattern matching
@@ -120,9 +124,16 @@ defmodule PcapFileEx.Stream do
         {:ok, stream} -> process_stream(stream)
         {:error, msg} -> IO.puts("Cannot open file: \#{msg}")
       end
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway", "10.0.0.1" => "server"}
+      {:ok, stream} = PcapFileEx.Stream.packets("capture.pcap", hosts_map: hosts)
   """
   @spec packets(Path.t()) :: {:ok, Enumerable.t(stream_item())} | {:error, String.t()}
-  def packets(path) do
+  def packets(path), do: packets(path, [])
+
+  @spec packets(Path.t(), keyword()) :: {:ok, Enumerable.t(stream_item())} | {:error, String.t()}
+  def packets(path, opts) do
     # Pre-validate by attempting to open
     case Pcap.open(path) do
       {:ok, reader} ->
@@ -143,7 +154,7 @@ defmodule PcapFileEx.Stream do
                 {:halt, :halt}
 
               {reader, index} ->
-                case Pcap.next_packet(reader) do
+                case Pcap.next_packet(reader, opts) do
                   {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
                   :eof -> {:halt, {reader, index}}
                   {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}
@@ -168,14 +179,26 @@ defmodule PcapFileEx.Stream do
 
   This is the old behavior from version 0.1.x.
 
+  ## Options
+
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
+
   ## Examples
 
       PcapFileEx.Stream.packets!("capture.pcap")
       |> Stream.filter(fn packet -> byte_size(packet.data) > 1000 end)
       |> Enum.take(10)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway"}
+      PcapFileEx.Stream.packets!("capture.pcap", hosts_map: hosts)
+      |> Enum.take(10)
   """
   @spec packets!(Path.t()) :: Enumerable.t()
-  def packets!(path) do
+  def packets!(path), do: packets!(path, [])
+
+  @spec packets!(Path.t(), keyword()) :: Enumerable.t()
+  def packets!(path, opts) do
     Stream.resource(
       # Start function: open the file
       fn ->
@@ -186,7 +209,7 @@ defmodule PcapFileEx.Stream do
       end,
       # Next function: read packets
       fn reader ->
-        case Pcap.next_packet(reader) do
+        case Pcap.next_packet(reader, opts) do
           {:ok, packet} -> {[packet], reader}
           :eof -> {:halt, reader}
           {:error, reason} -> raise "Failed to read packet: #{reason}"
@@ -210,6 +233,10 @@ defmodule PcapFileEx.Stream do
   The stream halts after emitting an error tuple. For raising behavior,
   use `from_reader!/1` instead.
 
+  ## Options
+
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
+
   ## Examples
 
       {:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
@@ -230,9 +257,16 @@ defmodule PcapFileEx.Stream do
       stream = PcapFileEx.Stream.from_reader(reader)
       # ... process stream ...
       PcapFileEx.PcapNg.close(reader)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway"}
+      stream = PcapFileEx.Stream.from_reader(reader, hosts_map: hosts)
   """
   @spec from_reader(Pcap.t() | PcapNg.t()) :: Enumerable.t(stream_item())
-  def from_reader(%Pcap{} = reader) do
+  def from_reader(reader), do: from_reader(reader, [])
+
+  @spec from_reader(Pcap.t() | PcapNg.t(), keyword()) :: Enumerable.t(stream_item())
+  def from_reader(%Pcap{} = reader, opts) do
     Stream.resource(
       fn -> {reader, 0} end,
       fn
@@ -240,7 +274,7 @@ defmodule PcapFileEx.Stream do
           {:halt, :halt}
 
         {reader, index} ->
-          case Pcap.next_packet(reader) do
+          case Pcap.next_packet(reader, opts) do
             {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
             :eof -> {:halt, {reader, index}}
             {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}
@@ -253,7 +287,7 @@ defmodule PcapFileEx.Stream do
     )
   end
 
-  def from_reader(%PcapNg{} = reader) do
+  def from_reader(%PcapNg{} = reader, opts) do
     Stream.resource(
       fn -> {reader, 0} end,
       fn
@@ -261,7 +295,7 @@ defmodule PcapFileEx.Stream do
           {:halt, :halt}
 
         {reader, index} ->
-          case PcapNg.next_packet(reader) do
+          case PcapNg.next_packet(reader, opts) do
             {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
             :eof -> {:halt, {reader, index}}
             {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}
@@ -280,19 +314,31 @@ defmodule PcapFileEx.Stream do
   This does NOT automatically close the reader when done.
   Works with both PCAP and PCAPNG readers.
 
+  ## Options
+
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
+
   ## Examples
 
       {:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
       PcapFileEx.Stream.from_reader!(reader)
       |> Enum.take(10)
       PcapFileEx.Pcap.close(reader)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway"}
+      PcapFileEx.Stream.from_reader!(reader, hosts_map: hosts)
+      |> Enum.take(10)
   """
   @spec from_reader!(Pcap.t() | PcapNg.t()) :: Enumerable.t()
-  def from_reader!(%Pcap{} = reader) do
+  def from_reader!(reader), do: from_reader!(reader, [])
+
+  @spec from_reader!(Pcap.t() | PcapNg.t(), keyword()) :: Enumerable.t()
+  def from_reader!(%Pcap{} = reader, opts) do
     Stream.resource(
       fn -> reader end,
       fn reader ->
-        case Pcap.next_packet(reader) do
+        case Pcap.next_packet(reader, opts) do
           {:ok, packet} -> {[packet], reader}
           :eof -> {:halt, reader}
           {:error, reason} -> raise "Failed to read packet: #{reason}"
@@ -302,11 +348,11 @@ defmodule PcapFileEx.Stream do
     )
   end
 
-  def from_reader!(%PcapNg{} = reader) do
+  def from_reader!(%PcapNg{} = reader, opts) do
     Stream.resource(
       fn -> reader end,
       fn reader ->
-        case PcapNg.next_packet(reader) do
+        case PcapNg.next_packet(reader, opts) do
           {:ok, packet} -> {[packet], reader}
           :eof -> {:halt, reader}
           {:error, reason} -> raise "Failed to read packet: #{reason}"

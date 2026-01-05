@@ -348,7 +348,47 @@ tcp_stats = PcapFileEx.stream!("capture.pcap")
 |> PcapFileEx.Stats.compute_from_stream()
 ```
 
-### Pattern 7: Raw Packet Processing (No Decoding)
+### Pattern 7: Hosts Mapping
+
+Map IP addresses to human-readable hostnames across all API entry points:
+
+```elixir
+# Define hosts mapping (IP string => hostname string)
+hosts = %{
+  "172.25.0.4" => "api-gateway",
+  "172.65.251.78" => "client-service",
+  "10.0.0.1" => "database"
+}
+
+# Apply to stream/read_all
+{:ok, packets} = PcapFileEx.read_all("capture.pcap", hosts_map: hosts)
+{:ok, stream} = PcapFileEx.stream("capture.pcap", hosts_map: hosts)
+
+# Apply to HTTP/2 analysis
+{:ok, complete, _} = PcapFileEx.HTTP2.analyze("capture.pcap", hosts_map: hosts)
+
+# Endpoints now show hostnames when available
+packet = hd(packets)
+IO.puts("#{packet.src}")  # "client-service:39604"
+IO.puts("#{packet.dst}")  # "api-gateway:9091"
+
+# Use Endpoint struct directly
+alias PcapFileEx.Endpoint
+endpoint = Endpoint.new("172.25.0.4", 9091)
+endpoint = Endpoint.with_hosts(endpoint, hosts)
+IO.puts("#{endpoint}")  # "api-gateway:9091"
+
+# Create from IP tuple (useful for HTTP/2)
+endpoint = Endpoint.from_tuple({{172, 25, 0, 4}, 9091}, hosts)
+```
+
+**Key points:**
+- Hosts map uses **IP strings** as keys (not tuples)
+- Uses `:inet.ntoa/1` for consistent IP formatting
+- All entry points support `:hosts_map` option
+- Falls back to IP when hostname not in map
+
+### Pattern 8: Raw Packet Processing (No Decoding)
 
 **When to disable decoding:**
 - Only need packet counts or sizes

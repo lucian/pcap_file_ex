@@ -51,6 +51,7 @@ defmodule PcapFileEx.HTTP2 do
     bodies based on Content-Type header. Multipart bodies are recursively decoded,
     JSON is parsed, and text is validated as UTF-8. When `false`, bodies remain as
     raw binaries and `decoded_body` is `nil`.
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution.
 
   ## Example
 
@@ -63,17 +64,24 @@ defmodule PcapFileEx.HTTP2 do
       Enum.each(incomplete, fn ex ->
         IO.puts("Incomplete: \#{PcapFileEx.HTTP2.IncompleteExchange.to_string(ex)}")
       end)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "client", "10.0.0.1" => "server"}
+      {:ok, complete, _incomplete} = PcapFileEx.HTTP2.analyze("capture.pcap", hosts_map: hosts)
+      %{client: client, server: server} = hd(complete)
+      IO.puts("Request from \#{client} to \#{server}")
   """
   @spec analyze(Path.t(), keyword()) ::
           {:ok, [Exchange.t()], [IncompleteExchange.t()]} | {:error, term()}
   def analyze(pcap_path, opts \\ []) do
     port_filter = Keyword.get(opts, :port)
     decode_content = Keyword.get(opts, :decode_content, true)
+    hosts_map = Keyword.get(opts, :hosts_map, %{})
 
     with {:ok, segments} <- extract_tcp_segments(pcap_path, port_filter) do
       # Filter to likely HTTP/2 flows (those with preface or on common ports)
       http2_segments = filter_http2_segments(segments)
-      Analyzer.analyze(http2_segments, decode_content: decode_content)
+      Analyzer.analyze(http2_segments, decode_content: decode_content, hosts_map: hosts_map)
     end
   end
 
@@ -87,6 +95,7 @@ defmodule PcapFileEx.HTTP2 do
 
   - `:decode_content` - When `true` (default), automatically decodes request/response
     bodies based on Content-Type header. When `false`, bodies remain as raw binaries.
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution.
 
   ## Example
 
@@ -97,6 +106,10 @@ defmodule PcapFileEx.HTTP2 do
       ]
 
       {:ok, complete, incomplete} = PcapFileEx.HTTP2.analyze_segments(segments)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "client"}
+      {:ok, complete, _incomplete} = PcapFileEx.HTTP2.analyze_segments(segments, hosts_map: hosts)
   """
   @spec analyze_segments([Analyzer.directional_segment()], keyword()) ::
           {:ok, [Exchange.t()], [IncompleteExchange.t()]}

@@ -74,10 +74,19 @@ defmodule PcapFileEx do
 
   Warning: This loads all packets into memory. For large files, use `stream/1` instead.
 
+  ## Options
+
+    * `:decode` - If true (default), attaches decoded protocol information to each packet
+    * `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
+
   ## Examples
 
       {:ok, packets} = PcapFileEx.read_all("capture.pcap")
       {:ok, packets} = PcapFileEx.read_all("capture.pcapng")
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway", "10.0.0.1" => "server"}
+      {:ok, packets} = PcapFileEx.read_all("capture.pcap", hosts_map: hosts)
   """
   @spec read_all(Path.t(), keyword()) :: {:ok, [PcapFileEx.Packet.t()]} | {:error, String.t()}
   def read_all(path, opts \\ []) when is_binary(path) do
@@ -85,8 +94,8 @@ defmodule PcapFileEx do
 
     result =
       case Format.detect(path) do
-        :pcap -> Pcap.read_all(path)
-        :pcapng -> PcapNg.read_all(path)
+        :pcap -> Pcap.read_all(path, opts)
+        :pcapng -> PcapNg.read_all(path, opts)
         {:error, reason} -> {:error, reason}
       end
 
@@ -108,6 +117,7 @@ defmodule PcapFileEx do
   ## Options
 
     * `:decode` - If true (default), attaches decoded protocol information to each packet
+    * `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
 
   ## Examples
 
@@ -121,6 +131,10 @@ defmodule PcapFileEx do
         {:ok, stream} -> stream |> Enum.take(10)
         {:error, msg} -> IO.puts("Error: \#{msg}")
       end
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway", "10.0.0.1" => "server"}
+      {:ok, stream} = PcapFileEx.stream("capture.pcap", hosts_map: hosts)
 
   ## Migration from 0.1.x
 
@@ -140,7 +154,7 @@ defmodule PcapFileEx do
     decode? = Keyword.get(opts, :decode, true)
 
     with format when format in [:pcap, :pcapng] <- Format.detect(path),
-         {:ok, base_stream} <- get_base_stream(format, path) do
+         {:ok, base_stream} <- get_base_stream(format, path, opts) do
       stream =
         if decode? do
           Elixir.Stream.map(base_stream, fn
@@ -191,15 +205,15 @@ defmodule PcapFileEx do
 
   # Private functions
 
-  defp get_base_stream(:pcap, path) do
-    PcapStream.packets(path)
+  defp get_base_stream(:pcap, path, opts) do
+    PcapStream.packets(path, opts)
   end
 
-  defp get_base_stream(:pcapng, path) do
-    stream_pcapng(path)
+  defp get_base_stream(:pcapng, path, opts) do
+    stream_pcapng(path, opts)
   end
 
-  defp stream_pcapng(path) do
+  defp stream_pcapng(path, opts) do
     # Pre-validate by attempting to open
     case PcapNg.open(path) do
       {:ok, reader} ->
@@ -218,7 +232,7 @@ defmodule PcapFileEx do
                 {:halt, :halt}
 
               {reader, index} ->
-                case PcapNg.next_packet(reader) do
+                case PcapNg.next_packet(reader, opts) do
                   {:ok, packet} -> {[{:ok, packet}], {reader, index + 1}}
                   :eof -> {:halt, {reader, index}}
                   {:error, reason} -> {[{:error, %{reason: reason, packet_index: index}}], :halt}

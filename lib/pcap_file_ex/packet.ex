@@ -59,9 +59,29 @@ defmodule PcapFileEx.Packet do
 
   @doc """
   Creates a Packet struct from a map returned by the NIF.
+
+  ## Options
+
+    * `:hosts_map` - A map of IP addresses to hostnames for resolving endpoint hosts.
+      See `PcapFileEx.Endpoint.hosts_map/0` type for details.
+
+  ## Examples
+
+      # Without hosts mapping
+      packet = Packet.from_map(nif_map)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "server", "10.0.0.1" => "client"}
+      packet = Packet.from_map(nif_map, hosts_map: hosts)
+      # packet.src.host and packet.dst.host will be resolved if IPs match
   """
   @spec from_map(map()) :: t()
-  def from_map(map) do
+  def from_map(map), do: from_map(map, [])
+
+  @spec from_map(map(), keyword()) :: t()
+  def from_map(map, opts) do
+    hosts_map = Keyword.get(opts, :hosts_map, %{})
+
     datalink = Map.get(map, :datalink)
     # Create DateTime timestamp (microsecond precision, for backward compatibility)
     timestamp = DateTime.from_unix!(map.timestamp_secs, :second)
@@ -75,6 +95,10 @@ defmodule PcapFileEx.Packet do
     timestamp_resolution = map |> Map.get(:timestamp_resolution) |> resolution_from_value()
     interface_map = map |> Map.get(:interface) |> interface_from_value()
     interface_id = Map.get(map, :interface_id)
+
+    # Apply hosts mapping to endpoints
+    src = Endpoint.with_hosts(src, hosts_map)
+    dst = Endpoint.with_hosts(dst, hosts_map)
 
     %__MODULE__{
       timestamp: timestamp,

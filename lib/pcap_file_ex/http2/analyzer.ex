@@ -46,7 +46,9 @@ defmodule PcapFileEx.HTTP2.Analyzer do
           timestamp: DateTime.t()
         }
 
-  @type option :: {:decode_content, boolean()}
+  @type option ::
+          {:decode_content, boolean()}
+          | {:hosts_map, PcapFileEx.Endpoint.hosts_map()}
 
   @doc """
   Analyze directional TCP segments and extract HTTP/2 exchanges.
@@ -59,11 +61,13 @@ defmodule PcapFileEx.HTTP2.Analyzer do
       and response bodies based on their Content-Type header. Multipart bodies
       are recursively decoded, JSON is parsed, and text is validated as UTF-8.
       When `false`, bodies are left as raw binaries and `decoded_body` is `nil`.
+    * `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution.
   """
   @spec analyze([directional_segment()], [option()]) ::
           {:ok, [Exchange.t()], [IncompleteExchange.t()]}
   def analyze(segments, opts \\ []) when is_list(segments) do
     decode_content = Keyword.get(opts, :decode_content, true)
+    hosts_map = Keyword.get(opts, :hosts_map, %{})
 
     # Process all segments, building connection state
     connections =
@@ -75,7 +79,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
     {complete, incomplete} =
       connections
       |> Map.values()
-      |> Enum.flat_map(&finalize_connection(&1, decode_content))
+      |> Enum.flat_map(&finalize_connection(&1, decode_content, hosts_map))
       |> Enum.split_with(fn
         %Exchange{} -> true
         %IncompleteExchange{} -> false
@@ -431,8 +435,13 @@ defmodule PcapFileEx.HTTP2.Analyzer do
   end
 
   # Finalize a connection - mark truncated streams and build exchanges
-  defp finalize_connection(%Connection{} = conn, decode_content) do
+  defp finalize_connection(%Connection{} = conn, decode_content, hosts_map) do
     tcp_flow = {conn.client || elem(conn.flow_key, 0), conn.server || elem(conn.flow_key, 1)}
+
+    exchange_opts = [
+      hosts_map: hosts_map,
+      client_identified: conn.client_identified
+    ]
 
     conn.streams
     |> Map.values()
@@ -440,10 +449,10 @@ defmodule PcapFileEx.HTTP2.Analyzer do
       stream = finalize_stream(stream)
 
       if StreamState.complete?(stream) and not stream.terminated do
-        exchange = Exchange.from_stream(stream, tcp_flow)
+        exchange = Exchange.from_stream(stream, tcp_flow, exchange_opts)
         if decode_content, do: decode_exchange_content(exchange), else: exchange
       else
-        IncompleteExchange.from_stream(stream, tcp_flow)
+        IncompleteExchange.from_stream(stream, tcp_flow, exchange_opts)
       end
     end)
     |> Enum.reject(&is_nil/1)

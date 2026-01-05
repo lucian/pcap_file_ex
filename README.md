@@ -18,6 +18,7 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **TCP Reassembly** - Reassemble HTTP messages split across multiple TCP packets
 - ✅ **HTTP Body Decoding** - Automatic decoding of JSON, ETF, form data, and text bodies
 - ✅ **HTTP/2 Analysis** - Reconstruct HTTP/2 cleartext (h2c) request/response exchanges from PCAP files
+- ✅ **Hosts Mapping** - Map IP addresses to human-readable hostnames for easier analysis
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
 - ✅ **Multi-File Merge** - Merge multiple captures by nanosecond-precision timestamps with clock validation
@@ -1459,6 +1460,57 @@ end)
 ```
 
 Use `PcapFileEx.Packet.decode_http/1` (or `decode_http!/1`) to obtain this structure directly from TCP payloads.
+
+### Hosts Mapping
+
+Map IP addresses to human-readable hostnames for easier analysis:
+
+```elixir
+# Define your hosts mapping
+hosts = %{
+  "172.25.0.4" => "api-gateway",
+  "172.65.251.78" => "client-service",
+  "10.0.0.1" => "database"
+}
+
+# Apply to streaming
+{:ok, stream} = PcapFileEx.stream("capture.pcap", hosts_map: hosts)
+
+stream
+|> Stream.map(fn {:ok, packet} -> packet end)
+|> Enum.each(fn packet ->
+  # Endpoints now show hostnames when available
+  IO.puts("#{packet.src} -> #{packet.dst}")
+  # Output: "client-service:39604 -> api-gateway:9091"
+end)
+
+# Apply to read_all
+{:ok, packets} = PcapFileEx.read_all("capture.pcap", hosts_map: hosts)
+
+# Apply to HTTP/2 analysis
+{:ok, complete, _incomplete} = PcapFileEx.HTTP2.analyze("capture.pcap", hosts_map: hosts)
+
+Enum.each(complete, fn ex ->
+  if PcapFileEx.HTTP2.Exchange.client_identified?(ex) do
+    IO.puts("#{ex.client} -> #{ex.server}: #{ex.request.method} #{ex.request.path}")
+    # Output: "client-service:39604 -> api-gateway:9091: GET /api/users"
+  else
+    {ep_a, ep_b} = PcapFileEx.HTTP2.Exchange.endpoints(ex)
+    IO.puts("#{ep_a} <-> #{ep_b}")
+  end
+end)
+
+# Use Endpoint struct directly
+alias PcapFileEx.Endpoint
+
+endpoint = Endpoint.new("172.25.0.4", 9091)
+endpoint = Endpoint.with_hosts(endpoint, hosts)
+IO.puts("#{endpoint}")  # "api-gateway:9091"
+
+# Create endpoint from IP tuple (useful for custom analysis)
+endpoint = Endpoint.from_tuple({{172, 25, 0, 4}, 9091}, hosts)
+IO.puts("#{endpoint}")  # "api-gateway:9091"
+```
 
 ### HTTP/2 Analysis
 

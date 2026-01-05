@@ -1,5 +1,42 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Hosts Mapping Feature** - Map IP addresses to human-readable hostnames
+  - New `:hosts_map` option on all entry points: `stream/2`, `read_all/2`, `HTTP2.analyze/2`, etc.
+  - `PcapFileEx.Endpoint` enhancements:
+    - New `host` field for optional hostname
+    - `new/3` - Create endpoint with IP, port, and hostname
+    - `with_hosts/2` - Apply hosts mapping to existing endpoint
+    - `from_tuple/1`, `from_tuple/2` - Create endpoint from IP tuple (used by HTTP/2 analyzer)
+    - Updated `to_string/1` - Prefers hostname over IP when displaying
+    - `String.Chars` protocol implementation for string interpolation
+  - Hosts map format: `%{String.t() => String.t()}` (IP strings to hostname strings)
+  - Uses `:inet.ntoa/1` everywhere for consistent IP string formatting
+
+### Breaking
+- **HTTP/2 Exchange and IncompleteExchange struct changes**
+  - Removed `tcp_flow` field (was `{endpoint(), endpoint()}` tuple)
+  - Added four new endpoint fields:
+    - `client: Endpoint.t() | nil` - Client endpoint (when identified via HTTP/2 preface)
+    - `server: Endpoint.t() | nil` - Server endpoint (when identified)
+    - `endpoint_a: Endpoint.t() | nil` - First endpoint (when client/server unknown)
+    - `endpoint_b: Endpoint.t() | nil` - Second endpoint (when client/server unknown)
+  - New helper functions: `endpoints/1`, `client_identified?/1`
+  - **Migration:**
+    ```elixir
+    # Before
+    {{{src_ip}, src_port}, {{dst_ip}, dst_port}} = exchange.tcp_flow
+
+    # After (when client/server identified)
+    %Endpoint{ip: client_ip, port: client_port} = exchange.client
+    %Endpoint{ip: server_ip, port: server_port} = exchange.server
+
+    # After (when unknown, use helper)
+    {endpoint1, endpoint2} = Exchange.endpoints(exchange)
+    ```
+
 ## [0.5.4] - 2025-12-23
 
 ### Fixed

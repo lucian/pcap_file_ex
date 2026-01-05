@@ -99,14 +99,25 @@ defmodule PcapFileEx.Pcap do
   Returns `{:ok, packet}` if a packet was read, `:eof` if the end of file
   was reached, or `{:error, reason}` if an error occurred.
 
+  ## Options
+
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
+
   ## Examples
 
       {:ok, reader} = PcapFileEx.Pcap.open("capture.pcap")
       {:ok, packet} = PcapFileEx.Pcap.next_packet(reader)
       IO.inspect(packet.timestamp)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway", "10.0.0.1" => "server"}
+      {:ok, packet} = PcapFileEx.Pcap.next_packet(reader, hosts_map: hosts)
   """
   @spec next_packet(t()) :: {:ok, Packet.t()} | :eof | {:error, String.t()}
-  def next_packet(%__MODULE__{reference: reference}) do
+  def next_packet(reader), do: next_packet(reader, [])
+
+  @spec next_packet(t(), keyword()) :: {:ok, Packet.t()} | :eof | {:error, String.t()}
+  def next_packet(%__MODULE__{reference: reference}, opts) do
     case Native.pcap_next_packet(reference) do
       nil ->
         :eof
@@ -115,7 +126,7 @@ defmodule PcapFileEx.Pcap do
         {:error, reason}
 
       packet_map when is_map(packet_map) ->
-        {:ok, Packet.from_map(packet_map)}
+        {:ok, Packet.from_map(packet_map, opts)}
     end
   end
 
@@ -127,16 +138,27 @@ defmodule PcapFileEx.Pcap do
   Returns `{:ok, packets}` on success or `{:error, reason}` if a packet
   fails to parse. On error, the file is still properly closed.
 
+  ## Options
+
+  - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution
+
   ## Examples
 
       {:ok, packets} = PcapFileEx.Pcap.read_all("capture.pcap")
       Enum.count(packets)
+
+      # With hosts mapping
+      hosts = %{"192.168.1.1" => "gateway"}
+      {:ok, packets} = PcapFileEx.Pcap.read_all("capture.pcap", hosts_map: hosts)
   """
   @spec read_all(Path.t()) :: {:ok, [Packet.t()]} | {:error, String.t()}
-  def read_all(path) do
+  def read_all(path), do: read_all(path, [])
+
+  @spec read_all(Path.t(), keyword()) :: {:ok, [Packet.t()]} | {:error, String.t()}
+  def read_all(path, opts) do
     case open(path) do
       {:ok, reader} ->
-        result = read_all_packets(reader, [])
+        result = read_all_packets(reader, [], opts)
         close(reader)
 
         case result do
@@ -149,9 +171,9 @@ defmodule PcapFileEx.Pcap do
     end
   end
 
-  defp read_all_packets(reader, acc) do
-    case next_packet(reader) do
-      {:ok, packet} -> read_all_packets(reader, [packet | acc])
+  defp read_all_packets(reader, acc, opts) do
+    case next_packet(reader, opts) do
+      {:ok, packet} -> read_all_packets(reader, [packet | acc], opts)
       :eof -> {:ok, acc}
       {:error, reason} -> {:error, reason}
     end

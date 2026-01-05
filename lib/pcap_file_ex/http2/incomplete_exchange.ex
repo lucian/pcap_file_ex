@@ -19,11 +19,22 @@ defmodule PcapFileEx.HTTP2.IncompleteExchange do
   ## Decode errors
   - `{:hpack_error, term()}` - HPACK decompression failed
   - `{:frame_error, term()}` - Malformed frame (bad padding, etc.)
+
+  ## Endpoint Semantics
+
+  Exactly one pair of endpoint fields will be set:
+  - When client/server roles are identified: `client` and `server` are set, `endpoint_a` and `endpoint_b` are nil
+  - When identification fails: `endpoint_a` and `endpoint_b` are set, `client` and `server` are nil
+
+  Use `client_identified?/1` to check which pair is set, and `endpoints/1` to get
+  the pair of endpoints regardless of which fields are populated.
   """
 
+  alias PcapFileEx.Endpoint
   alias PcapFileEx.HTTP2.{Exchange, StreamState}
 
-  @type endpoint :: {tuple(), non_neg_integer()}
+  @typedoc "Tuple of {ip_tuple, port} for backwards compatibility"
+  @type legacy_endpoint :: {tuple(), non_neg_integer()}
 
   # Protocol-level termination
   @type reason ::
@@ -41,34 +52,105 @@ defmodule PcapFileEx.HTTP2.IncompleteExchange do
 
   @type t :: %__MODULE__{
           stream_id: non_neg_integer(),
-          tcp_flow: {endpoint(), endpoint()},
+          client: Endpoint.t() | nil,
+          server: Endpoint.t() | nil,
+          endpoint_a: Endpoint.t() | nil,
+          endpoint_b: Endpoint.t() | nil,
           request: Exchange.request() | nil,
           response: Exchange.response() | nil,
           reason: reason(),
           timestamp: DateTime.t()
         }
 
-  defstruct [:stream_id, :tcp_flow, :request, :response, :reason, :timestamp]
+  defstruct [
+    :stream_id,
+    :client,
+    :server,
+    :endpoint_a,
+    :endpoint_b,
+    :request,
+    :response,
+    :reason,
+    :timestamp
+  ]
 
   @doc """
   Build an incomplete exchange from a stream state.
 
   Determines the reason from the stream's termination_reason or infers
   from the stream's state.
+
+  ## Parameters
+
+  - `stream` - The stream state
+  - `tcp_flow` - Tuple of {{ip_tuple, port}, {ip_tuple, port}} (legacy format)
+  - `opts` - Options:
+    - `:hosts_map` - Map of IP strings to hostnames
+    - `:client_identified` - Whether client/server roles were identified (default: true)
   """
-  @spec from_stream(StreamState.t(), {endpoint(), endpoint()}) :: t()
-  def from_stream(%StreamState{} = stream, tcp_flow) do
+  @spec from_stream(StreamState.t(), {legacy_endpoint(), legacy_endpoint()}) :: t()
+  def from_stream(stream, tcp_flow), do: from_stream(stream, tcp_flow, [])
+
+  @spec from_stream(StreamState.t(), {legacy_endpoint(), legacy_endpoint()}, keyword()) :: t()
+  def from_stream(%StreamState{} = stream, {endpoint_a, endpoint_b}, opts) do
     reason = determine_reason(stream)
+    hosts_map = Keyword.get(opts, :hosts_map, %{})
+    client_identified = Keyword.get(opts, :client_identified, true)
+
+    {client, server, ep_a, ep_b} =
+      if client_identified do
+        {Endpoint.from_tuple(endpoint_a, hosts_map), Endpoint.from_tuple(endpoint_b, hosts_map),
+         nil, nil}
+      else
+        {nil, nil, Endpoint.from_tuple(endpoint_a, hosts_map),
+         Endpoint.from_tuple(endpoint_b, hosts_map)}
+      end
 
     %__MODULE__{
       stream_id: stream.stream_id,
-      tcp_flow: tcp_flow,
+      client: client,
+      server: server,
+      endpoint_a: ep_a,
+      endpoint_b: ep_b,
       request: Exchange.build_request(stream),
       response: Exchange.build_response(stream),
       reason: reason,
       timestamp: stream.completed_at || stream.created_at
     }
   end
+
+  @doc """
+  Returns the pair of endpoints, regardless of whether client/server was identified.
+
+  When client/server identified, returns `{client, server}`.
+  When not identified, returns `{endpoint_a, endpoint_b}`.
+
+  ## Examples
+
+      {client, server} = IncompleteExchange.endpoints(exchange)
+  """
+  @spec endpoints(t()) :: {Endpoint.t(), Endpoint.t()}
+  def endpoints(%__MODULE__{client: client, server: server}) when not is_nil(client) do
+    {client, server}
+  end
+
+  def endpoints(%__MODULE__{endpoint_a: a, endpoint_b: b}) do
+    {a, b}
+  end
+
+  @doc """
+  Returns true if client/server roles were identified for this exchange.
+
+  ## Examples
+
+      if IncompleteExchange.client_identified?(exchange) do
+        IO.puts("Client: \#{exchange.client}")
+      else
+        IO.puts("Endpoints: \#{exchange.endpoint_a} <-> \#{exchange.endpoint_b}")
+      end
+  """
+  @spec client_identified?(t()) :: boolean()
+  def client_identified?(%__MODULE__{client: client}), do: not is_nil(client)
 
   @doc """
   Get a human-readable description of the incompletion reason.
