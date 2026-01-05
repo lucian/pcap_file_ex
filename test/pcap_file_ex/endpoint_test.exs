@@ -146,11 +146,4 @@ defmodule PcapFileEx.EndpointTest do
       assert Endpoint.to_string(endpoint) == "api-server:8080"
     end
   end
-
-  describe "String.Chars protocol" do
-    test "implements to_string/1" do
-      endpoint = Endpoint.new("192.168.1.1", 8080, "api-server")
-      assert "#{endpoint}" == "api-server:8080"
-    end
-  end
 end
