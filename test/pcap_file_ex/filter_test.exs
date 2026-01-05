@@ -232,7 +232,7 @@ defmodule PcapFileEx.FilterTest do
         |> Enum.to_list()
 
       # Our test capture contains "Hello, World!" responses
-      assert length(filtered) >= 0
+      assert is_list(filtered)
       # Just verify it doesn't crash - regex matching on binary data is tricky
     end
   end

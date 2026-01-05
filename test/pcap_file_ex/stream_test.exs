@@ -282,7 +282,7 @@ defmodule PcapFileEx.StreamTest do
         end)
 
       # We should have collected some valid packets
-      assert length(packets) >= 0
+      assert is_list(packets)
       # And at least one error
       refute Enum.empty?(errors)
     end
