@@ -63,7 +63,7 @@ defmodule PcapFileEx.Packet do
   ## Options
 
     * `:hosts_map` - A map of IP addresses to hostnames for resolving endpoint hosts.
-      See `PcapFileEx.Endpoint.hosts_map/0` type for details.
+      See `t:PcapFileEx.Endpoint.hosts_map/0` for details.
 
   ## Examples
 
