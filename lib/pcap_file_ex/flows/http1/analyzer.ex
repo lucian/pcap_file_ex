@@ -46,6 +46,7 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
   - `opts` - Options:
     - `:decode_content` - Whether to decode bodies (default: true)
     - `:hosts_map` - Map of IP strings to hostnames
+    - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
 
   ## Returns
 
@@ -55,12 +56,13 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
   def analyze(segments, opts \\ []) do
     decode_content = Keyword.get(opts, :decode_content, true)
     hosts_map = Keyword.get(opts, :hosts_map, %{})
+    decoders = Keyword.get(opts, :decoders, [])
 
     flows =
       segments
       |> Enum.group_by(& &1.flow_key)
       |> Enum.flat_map(fn {flow_key, flow_segments} ->
-        analyze_flow(flow_key, flow_segments, decode_content, hosts_map)
+        analyze_flow(flow_key, flow_segments, decode_content, hosts_map, decoders)
       end)
       |> Enum.sort_by(fn flow ->
         case flow.exchanges do
@@ -73,7 +75,7 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
   end
 
   # Analyze a single TCP flow for HTTP/1.x exchanges
-  defp analyze_flow(flow_key, segments, decode_content, hosts_map) do
+  defp analyze_flow(flow_key, segments, decode_content, hosts_map, decoders) do
     # Sort segments by timestamp
     sorted = Enum.sort_by(segments, & &1.timestamp, DateTime)
 
@@ -111,8 +113,10 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
       {client_endpoint, server_endpoint} = determine_endpoints(flow_key, client_dir, hosts_map)
 
       # Parse requests and responses
-      requests = parse_requests(client_data, client_segments, decode_content)
-      responses = parse_responses(server_data, server_segments, decode_content)
+      requests = parse_requests(client_data, client_segments, decode_content, decoders)
+
+      responses =
+        parse_responses(server_data, server_segments, decode_content, decoders, requests)
 
       # Pair requests with responses
       exchanges = pair_exchanges(requests, responses)
@@ -162,30 +166,32 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
   end
 
   # Parse HTTP/1.x requests from data
-  defp parse_requests(data, segments, decode_content) do
-    parse_messages(data, segments, :request, decode_content, [])
+  defp parse_requests(data, segments, decode_content, decoders) do
+    parse_messages(data, segments, :request, decode_content, decoders, nil, [])
   end
 
-  # Parse HTTP/1.x responses from data
-  defp parse_responses(data, segments, decode_content) do
-    parse_messages(data, segments, :response, decode_content, [])
+  # Parse HTTP/1.x responses from data (needs requests for context pairing)
+  defp parse_responses(data, segments, decode_content, decoders, requests) do
+    parse_messages(data, segments, :response, decode_content, decoders, requests, [])
   end
 
-  defp parse_messages("", _segments, _type, _decode, acc), do: Enum.reverse(acc)
+  defp parse_messages("", _segments, _type, _decode, _decoders, _requests, acc),
+    do: Enum.reverse(acc)
 
-  defp parse_messages(data, _segments, _type, _decode_content, acc) when byte_size(data) < 10 do
+  defp parse_messages(data, _segments, _type, _decode_content, _decoders, _requests, acc)
+       when byte_size(data) < 10 do
     # Not enough data for a message
     Enum.reverse(acc)
   end
 
-  defp parse_messages(data, segments, type, decode_content, acc) do
+  defp parse_messages(data, segments, type, decode_content, decoders, requests, acc) do
     case type do
-      :request -> parse_request_message(data, segments, decode_content, acc)
-      :response -> parse_response_message(data, segments, decode_content, acc)
+      :request -> parse_request_message(data, segments, decode_content, decoders, acc)
+      :response -> parse_response_message(data, segments, decode_content, decoders, requests, acc)
     end
   end
 
-  defp parse_request_message(data, segments, decode_content, acc) do
+  defp parse_request_message(data, segments, decode_content, decoders, acc) do
     case parse_request_line(data) do
       {:ok, method, path, version, rest} ->
         case parse_headers(rest) do
@@ -196,7 +202,17 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
             decoded_body =
               if decode_content do
                 content_type = Map.get(headers, "content-type")
-                decode_body(content_type, body)
+                # Build context for custom decoders
+                ctx = %{
+                  protocol: :http1,
+                  direction: :request,
+                  scope: :body,
+                  headers: headers,
+                  method: method,
+                  path: path
+                }
+
+                decode_body(content_type, body, decoders, ctx)
               else
                 nil
               end
@@ -211,7 +227,9 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
               timestamp: timestamp
             }
 
-            parse_messages(remaining, segments, :request, decode_content, [request | acc])
+            parse_messages(remaining, segments, :request, decode_content, decoders, nil, [
+              request | acc
+            ])
 
           :incomplete ->
             Enum.reverse(acc)
@@ -222,7 +240,7 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
     end
   end
 
-  defp parse_response_message(data, segments, decode_content, acc) do
+  defp parse_response_message(data, segments, decode_content, decoders, requests, acc) do
     case parse_status_line(data) do
       {:ok, version, status, reason, rest} ->
         case parse_headers(rest) do
@@ -233,7 +251,21 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
             decoded_body =
               if decode_content do
                 content_type = Map.get(headers, "content-type")
-                decode_body(content_type, body)
+                # Get corresponding request for context (if available)
+                response_index = length(acc)
+                request = if requests, do: Enum.at(requests, response_index)
+                # Build context for custom decoders
+                ctx = %{
+                  protocol: :http1,
+                  direction: :response,
+                  scope: :body,
+                  headers: headers,
+                  status: status,
+                  method: request && request.method,
+                  path: request && request.path
+                }
+
+                decode_body(content_type, body, decoders, ctx)
               else
                 nil
               end
@@ -248,7 +280,9 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
               timestamp: timestamp
             }
 
-            parse_messages(remaining, segments, :response, decode_content, [response | acc])
+            parse_messages(remaining, segments, :response, decode_content, decoders, requests, [
+              response | acc
+            ])
 
           :incomplete ->
             Enum.reverse(acc)
@@ -442,8 +476,12 @@ defmodule PcapFileEx.Flows.HTTP1.Analyzer do
     Timestamp.from_datetime(first.timestamp)
   end
 
-  defp decode_body(nil, body), do: {:binary, body}
-  defp decode_body(content_type, body), do: Content.decode(content_type, body)
+  defp decode_body(nil, body, _decoders, _ctx), do: {:binary, body}
+
+  defp decode_body(content_type, body, decoders, ctx) do
+    opts = [decoders: decoders, context: ctx]
+    Content.decode(content_type, body, opts)
+  end
 
   # Pair requests with responses (1:1 in HTTP/1.x pipelining order)
   defp pair_exchanges(requests, responses) do

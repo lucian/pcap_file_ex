@@ -11,9 +11,19 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
   - `from` - Source endpoint
   - `to` - Destination endpoint
   - `payload` - UDP payload binary
+  - `decoded_payload` - Custom decoder result, or `nil` if no decoder matched
   - `timestamp` - Datagram timestamp (nanosecond precision)
   - `relative_offset_ms` - Offset from flow start (for playback)
   - `size` - Payload size in bytes
+
+  ## Custom Decoding
+
+  When custom decoders are registered via `PcapFileEx.Flows.analyze/2`, the
+  `decoded_payload` field contains the result:
+
+  - `{:custom, term}` - Custom decoder succeeded
+  - `{:decode_error, reason}` - Custom decoder failed
+  - `nil` - No decoder matched or no decoders registered
 
   ## Playback Timing
 
@@ -41,13 +51,23 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
   alias PcapFileEx.{Endpoint, Timestamp}
 
   @enforce_keys [:flow_seq, :from, :to, :payload, :timestamp, :size]
-  defstruct [:flow_seq, :from, :to, :payload, :timestamp, :size, relative_offset_ms: 0]
+  defstruct [
+    :flow_seq,
+    :from,
+    :to,
+    :payload,
+    :decoded_payload,
+    :timestamp,
+    :size,
+    relative_offset_ms: 0
+  ]
 
   @type t :: %__MODULE__{
           flow_seq: non_neg_integer(),
           from: Endpoint.t(),
           to: Endpoint.t(),
           payload: binary(),
+          decoded_payload: {:custom, term()} | {:decode_error, term()} | nil,
           timestamp: Timestamp.t(),
           relative_offset_ms: non_neg_integer(),
           size: non_neg_integer()
@@ -84,6 +104,7 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
       from: from,
       to: to,
       payload: payload,
+      decoded_payload: nil,
       timestamp: timestamp,
       size: byte_size(payload),
       relative_offset_ms: 0

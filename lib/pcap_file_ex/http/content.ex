@@ -3,14 +3,23 @@ defmodule PcapFileEx.HTTP.Content do
   Generic HTTP body content decoder based on Content-Type.
 
   Recursively decodes multipart bodies, JSON, and text.
-  Unknown types remain as binary.
+  Unknown types remain as binary. Supports custom decoders for binary content.
 
   ## Design Principles
 
   1. **Content-Type driven** - Decode strategy based on Content-Type header
   2. **Recursive** - Multipart parts are decoded based on their own Content-Type
   3. **Safe fallback** - Unknown types remain as binary (no crashes)
-  4. **Extensible** - Easy to add new decoders
+  4. **Custom decoders** - Binary content can be decoded by user-provided decoders
+
+  ## Custom Decoder Pipeline
+
+  Custom decoders are invoked only when built-in decoding yields `{:binary, payload}`:
+  1. Built-in JSON decoder (`application/json`)
+  2. Built-in text decoder (`text/*`)
+  3. Built-in multipart parser (`multipart/*`)
+  4. **Custom decoders** (if provided in opts)
+  5. Binary fallback
 
   ## Examples
 
@@ -25,11 +34,15 @@ defmodule PcapFileEx.HTTP.Content do
 
   """
 
+  alias PcapFileEx.Flows.DecoderMatcher
+
   @type decoded ::
           {:json, map() | list()}
           | {:text, String.t()}
           | {:multipart, [part()]}
           | {:binary, binary()}
+          | {:custom, term()}
+          | {:decode_error, term()}
 
   @type part :: %{
           content_type: String.t(),
@@ -51,6 +64,13 @@ defmodule PcapFileEx.HTTP.Content do
   - `{:text, string}` - Valid UTF-8 text
   - `{:multipart, parts}` - List of decoded parts
   - `{:binary, data}` - Raw binary (unknown type or decode failure)
+  - `{:custom, data}` - Custom decoder result
+  - `{:decode_error, reason}` - Custom decoder error
+
+  ## Options
+
+  - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
+  - `:context` - Base context for decoder matching (protocol, direction, headers, etc.)
 
   ## Examples
 
@@ -64,25 +84,41 @@ defmodule PcapFileEx.HTTP.Content do
       {:binary, <<1, 2, 3>>}
 
   """
-  @spec decode(String.t() | nil, binary()) :: decoded()
-  def decode(nil, body), do: {:binary, body}
-  def decode("", body), do: {:binary, body}
+  @spec decode(String.t() | nil, binary(), keyword()) :: decoded()
+  def decode(content_type, body, opts \\ [])
 
-  def decode(content_type, body) when is_binary(content_type) and is_binary(body) do
+  def decode(nil, body, opts), do: try_custom_or_binary(nil, body, opts)
+  def decode("", body, opts), do: try_custom_or_binary("", body, opts)
+
+  def decode(content_type, body, opts) when is_binary(content_type) and is_binary(body) do
     base_type = normalize_content_type(content_type)
 
     cond do
       String.starts_with?(base_type, "multipart/") ->
-        decode_multipart(content_type, body)
+        decode_multipart(content_type, body, opts)
 
       base_type in ["application/json", "application/problem+json"] ->
-        decode_json(body)
+        # JSON parse failure yields {:binary, body} which is eligible for custom decoders
+        case decode_json(body) do
+          {:binary, _} = binary_result ->
+            try_custom_or_binary(content_type, body, opts, binary_result)
+
+          other ->
+            other
+        end
 
       String.starts_with?(base_type, "text/") ->
-        decode_text(body, extract_charset(content_type))
+        # Text decode failure yields {:binary, body} which is eligible for custom decoders
+        case decode_text(body, extract_charset(content_type)) do
+          {:binary, _} = binary_result ->
+            try_custom_or_binary(content_type, body, opts, binary_result)
+
+          other ->
+            other
+        end
 
       true ->
-        {:binary, body}
+        try_custom_or_binary(content_type, body, opts)
     end
   end
 
@@ -148,6 +184,28 @@ defmodule PcapFileEx.HTTP.Content do
 
   # --- Private Functions ---
 
+  # Try custom decoders for binary content, fall back to {:binary, payload}
+  defp try_custom_or_binary(content_type, body, opts, fallback \\ nil) do
+    decoders = Keyword.get(opts, :decoders, [])
+    base_ctx = Keyword.get(opts, :context, %{})
+
+    if decoders == [] do
+      fallback || {:binary, body}
+    else
+      # Build context for matching - only set scope to :body if not already set
+      ctx =
+        base_ctx
+        |> Map.put_new(:scope, :body)
+        |> Map.put(:content_type, content_type && normalize_content_type(content_type))
+
+      case DecoderMatcher.find_and_invoke(decoders, ctx, body) do
+        {:ok, decoded} -> {:custom, decoded}
+        {:error, reason} -> {:decode_error, reason}
+        :skip -> fallback || {:binary, body}
+      end
+    end
+  end
+
   defp normalize_content_type(content_type) do
     content_type
     |> String.split(";")
@@ -193,17 +251,31 @@ defmodule PcapFileEx.HTTP.Content do
     end
   end
 
-  defp decode_multipart(content_type, body) do
+  defp decode_multipart(content_type, body, opts) do
     with {:ok, boundary} <- extract_boundary(content_type),
          {:ok, parts} <- parse_parts(body, boundary) do
+      base_ctx = Keyword.get(opts, :context, %{})
+
       decoded_parts =
         Enum.map(parts, fn part ->
           part_ct = Map.get(part.headers, "content-type", "application/octet-stream")
-          decoded_body = decode(part_ct, part.body)
+          content_id = Map.get(part.headers, "content-id")
+
+          # Build part-specific context for custom decoders
+          # Override headers with part's own headers (not parent request/response headers)
+          part_ctx =
+            base_ctx
+            |> Map.put(:scope, :multipart_part)
+            |> Map.put(:content_type, normalize_content_type(part_ct))
+            |> Map.put(:content_id, content_id)
+            |> Map.put(:headers, part.headers)
+
+          part_opts = Keyword.put(opts, :context, part_ctx)
+          decoded_body = decode(part_ct, part.body, part_opts)
 
           %{
             content_type: part_ct,
-            content_id: Map.get(part.headers, "content-id"),
+            content_id: content_id,
             headers: part.headers,
             body: decoded_body
           }
@@ -211,7 +283,8 @@ defmodule PcapFileEx.HTTP.Content do
 
       {:multipart, decoded_parts}
     else
-      {:error, _} -> {:binary, body}
+      # Multipart parse failure yields {:binary, body} which is eligible for custom decoders
+      {:error, _} -> try_custom_or_binary(content_type, body, opts)
     end
   end
 

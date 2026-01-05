@@ -49,6 +49,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
   @type option ::
           {:decode_content, boolean()}
           | {:hosts_map, PcapFileEx.Endpoint.hosts_map()}
+          | {:decoders, [PcapFileEx.Flows.Decoder.decoder_spec()]}
 
   @doc """
   Analyze directional TCP segments and extract HTTP/2 exchanges.
@@ -62,12 +63,14 @@ defmodule PcapFileEx.HTTP2.Analyzer do
       are recursively decoded, JSON is parsed, and text is validated as UTF-8.
       When `false`, bodies are left as raw binaries and `decoded_body` is `nil`.
     * `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution.
+    * `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
   """
   @spec analyze([directional_segment()], [option()]) ::
           {:ok, [Exchange.t()], [IncompleteExchange.t()]}
   def analyze(segments, opts \\ []) when is_list(segments) do
     decode_content = Keyword.get(opts, :decode_content, true)
     hosts_map = Keyword.get(opts, :hosts_map, %{})
+    decoders = Keyword.get(opts, :decoders, [])
 
     # Process all segments, building connection state
     connections =
@@ -79,7 +82,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
     {complete, incomplete} =
       connections
       |> Map.values()
-      |> Enum.flat_map(&finalize_connection(&1, decode_content, hosts_map))
+      |> Enum.flat_map(&finalize_connection(&1, decode_content, hosts_map, decoders))
       |> Enum.split_with(fn
         %Exchange{} -> true
         %IncompleteExchange{} -> false
@@ -435,7 +438,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
   end
 
   # Finalize a connection - mark truncated streams and build exchanges
-  defp finalize_connection(%Connection{} = conn, decode_content, hosts_map) do
+  defp finalize_connection(%Connection{} = conn, decode_content, hosts_map, decoders) do
     tcp_flow = {conn.client || elem(conn.flow_key, 0), conn.server || elem(conn.flow_key, 1)}
 
     exchange_opts = [
@@ -450,7 +453,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
 
       if StreamState.complete?(stream) and not stream.terminated do
         exchange = Exchange.from_stream(stream, tcp_flow, exchange_opts)
-        if decode_content, do: decode_exchange_content(exchange), else: exchange
+        if decode_content, do: decode_exchange_content(exchange, decoders), else: exchange
       else
         IncompleteExchange.from_stream(stream, tcp_flow, exchange_opts)
       end
@@ -459,16 +462,43 @@ defmodule PcapFileEx.HTTP2.Analyzer do
   end
 
   # Decode request and response bodies based on Content-Type
-  defp decode_exchange_content(%Exchange{} = exchange) do
-    request = decode_body(exchange.request)
-    response = decode_body(exchange.response)
+  defp decode_exchange_content(%Exchange{} = exchange, decoders) do
+    request = decode_body(exchange.request, :request, decoders, exchange)
+    response = decode_body(exchange.response, :response, decoders, exchange)
     %{exchange | request: request, response: response}
   end
 
-  defp decode_body(%{headers: headers, body: body} = data) do
+  defp decode_body(%{headers: headers, body: body} = data, direction, decoders, exchange) do
     content_type = Headers.get(headers, "content-type")
-    decoded = Content.decode(content_type, body)
+    # Build context for custom decoders - normalize headers to %{String.t() => String.t()}
+    headers_map = normalize_headers_map(headers)
+
+    ctx = %{
+      protocol: :http2,
+      direction: direction,
+      scope: :body,
+      headers: headers_map,
+      method: exchange.request.method,
+      path: exchange.request.path
+    }
+
+    ctx =
+      if direction == :response, do: Map.put(ctx, :status, exchange.response.status), else: ctx
+
+    opts = [decoders: decoders, context: ctx]
+    decoded = Content.decode(content_type, body, opts)
     %{data | decoded_body: decoded}
+  end
+
+  # Normalize HTTP/2 headers to %{String.t() => String.t()} for decoder context.
+  # Joins multi-value headers with ", " per HTTP spec (RFC 7230).
+  defp normalize_headers_map(headers) do
+    headers.regular
+    |> Enum.map(fn {k, v} ->
+      value = if is_list(v), do: Enum.join(v, ", "), else: v
+      {k, value}
+    end)
+    |> Map.new()
   end
 
   # Finalize a stream - set termination reason for truncated streams

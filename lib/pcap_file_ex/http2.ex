@@ -51,6 +51,7 @@ defmodule PcapFileEx.HTTP2 do
     JSON is parsed, and text is validated as UTF-8. When `false`, bodies remain as
     raw binaries and `decoded_body` is `nil`.
   - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution.
+  - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
 
   ## Example
 
@@ -76,11 +77,17 @@ defmodule PcapFileEx.HTTP2 do
     port_filter = Keyword.get(opts, :port)
     decode_content = Keyword.get(opts, :decode_content, true)
     hosts_map = Keyword.get(opts, :hosts_map, %{})
+    decoders = Keyword.get(opts, :decoders, [])
 
     with {:ok, segments} <- TCPExtractor.extract(pcap_path, port: port_filter) do
       # Filter to likely HTTP/2 flows (those with preface or on common ports)
       http2_segments = filter_http2_segments(segments)
-      Analyzer.analyze(http2_segments, decode_content: decode_content, hosts_map: hosts_map)
+
+      Analyzer.analyze(http2_segments,
+        decode_content: decode_content,
+        hosts_map: hosts_map,
+        decoders: decoders
+      )
     end
   end
 

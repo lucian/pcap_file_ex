@@ -95,6 +95,7 @@ defmodule PcapFileEx.MixProject do
         "usage-rules/http.md",
         "usage-rules/http2.md",
         "usage-rules/flows.md",
+        "usage-rules/flows-decoders.md",
         "usage-rules/formats.md",
         "usage-rules/merging.md",
         "usage-rules/writing.md",

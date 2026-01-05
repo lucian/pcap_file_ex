@@ -1615,6 +1615,63 @@ flow = PcapFileEx.Flows.AnalysisResult.get_flow(result, key)
 - ✅ **Hosts mapping** - Resolve IPs to human-readable hostnames
 - ✅ **HTTP/1 reconstruction** - Request/response pairing with chunked encoding support
 - ✅ **HTTP/2 integration** - Wraps existing HTTP/2 analyzer with flow metadata
+- ✅ **Custom Decoders** - Decode domain-specific protocols (UDP telemetry, 5G SBI multipart, etc.)
+
+### Custom Decoders for Flows
+
+Decode protocol-specific payloads with custom decoders:
+
+```elixir
+# Define a decoder for custom binary protocol on UDP port 5005
+udp_decoder = %{
+  protocol: :udp,
+  match: %{port: 5005},
+  decoder: &MyTelemetry.decode/1
+}
+
+# Define a decoder for 5G SBI multipart parts
+ngap_decoder = %{
+  protocol: :http1,
+  match: %{scope: :multipart_part, content_type: "application/vnd.3gpp.ngap"},
+  decoder: fn %{content_id: id}, payload ->
+    {:ok, {:ngap, id, NGAP.parse(payload)}}
+  end
+}
+
+# Analyze with custom decoders
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
+  decoders: [udp_decoder, ngap_decoder]
+)
+
+# Access decoded UDP payload
+datagram = hd(hd(result.udp).datagrams)
+case datagram.decoded_payload do
+  {:custom, data} -> IO.inspect(data)
+  {:decode_error, reason} -> IO.puts("Failed: #{inspect(reason)}")
+  nil -> IO.puts("No decoder matched")
+end
+
+# Access decoded HTTP multipart part
+exchange = hd(hd(result.http1).exchanges)
+case exchange.response.decoded_body do
+  {:multipart, parts} ->
+    Enum.each(parts, fn part ->
+      case part.body do
+        {:custom, data} -> IO.inspect(data)
+        _ -> :skip
+      end
+    end)
+  _ -> :skip
+end
+```
+
+**Key features:**
+- **Binary-only**: Custom decoders run only when built-in decoding yields `{:binary, payload}`
+- **Result wrapping**: Decoded values wrapped as `{:custom, term}` to distinguish from built-in decoding
+- **Error handling**: Decoder failures stored as `{:decode_error, reason}`
+- **Match criteria**: Port, content-type, scope, path, method, content-id
+
+See `PcapFileEx.Flows.Decoder` module for complete documentation and decoder templates.
 
 ### Header
 

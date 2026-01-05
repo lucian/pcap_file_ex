@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### Added
+- **Custom Decoders for Flows API** - Register custom decoders for protocol-specific payloads
+  - New `:decoders` option on `PcapFileEx.Flows.analyze/2`
+  - Decode UDP datagrams based on destination port
+  - Decode HTTP/1 and HTTP/2 bodies based on content-type
+  - Decode multipart parts based on content-type or content-id
+  - New modules:
+    - `PcapFileEx.Flows.Decoder` - Behaviour and types for custom decoders
+    - `PcapFileEx.Flows.DecoderMatcher` - Matcher evaluation and decoder invocation
+  - Decoder types:
+    - Arity-1 functions: `(binary() -> term())` for simple decoders
+    - Arity-2 functions: `(match_context(), binary() -> decode_result())` for context-aware decoders
+    - Modules implementing `Decoder` behaviour with `decode/2` callback
+  - Match criteria: protocol, scope, port, content_type, content_id, method, path
+  - Result wrapping: `{:custom, term}` for success, `{:decode_error, reason}` for failure
+  - "Binary only" focus: Custom decoders do not override built-in JSON/text decoding
+  - Full context passed to decoders: protocol, direction, scope, headers, method, path, status
+  - UDP datagrams gain `decoded_payload` field
+
 - **Traffic Flows API** - Unified API to analyze traffic flows by protocol
   - New `PcapFileEx.Flows` module with `analyze/2` function
   - Identifies and groups traffic by protocol: HTTP/1, HTTP/2, UDP

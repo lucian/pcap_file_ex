@@ -15,7 +15,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   """
 
   alias PcapFileEx.{Endpoint, Flow, Timestamp}
-  alias PcapFileEx.Flows.UDP
+  alias PcapFileEx.Flows.{DecoderMatcher, UDP}
 
   @type packet :: %{
           src_ip: tuple(),
@@ -34,6 +34,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   - `packets` - List of UDP packet maps
   - `opts` - Options:
     - `:hosts_map` - Map of IP strings to hostnames
+    - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
 
   ## Returns
 
@@ -52,12 +53,13 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   @spec collect([packet()], keyword()) :: {:ok, [UDP.Flow.t()]}
   def collect(packets, opts \\ []) do
     hosts_map = Keyword.get(opts, :hosts_map, %{})
+    decoders = Keyword.get(opts, :decoders, [])
 
     flows =
       packets
       |> Enum.group_by(&{&1.dst_ip, &1.dst_port})
       |> Enum.map(fn {{dst_ip, dst_port}, datagrams} ->
-        build_flow(dst_ip, dst_port, datagrams, hosts_map)
+        build_flow(dst_ip, dst_port, datagrams, hosts_map, decoders)
       end)
       |> Enum.sort_by(fn flow ->
         case flow.datagrams do
@@ -78,6 +80,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   - `opts` - Options:
     - `:port` - Filter to specific UDP port
     - `:hosts_map` - Map of IP strings to hostnames
+    - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
 
   ## Returns
 
@@ -87,6 +90,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   def extract(pcap_path, opts \\ []) do
     port_filter = Keyword.get(opts, :port)
     hosts_map = Keyword.get(opts, :hosts_map, %{})
+    decoders = Keyword.get(opts, :decoders, [])
 
     case PcapFileEx.stream(pcap_path) do
       {:ok, stream} ->
@@ -104,7 +108,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
           end)
           |> Enum.to_list()
 
-        collect(packets, hosts_map: hosts_map)
+        collect(packets, hosts_map: hosts_map, decoders: decoders)
 
       {:error, reason} ->
         {:error, reason}
@@ -112,7 +116,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   end
 
   # Build a UDP flow from datagrams to the same destination
-  defp build_flow(dst_ip, dst_port, datagrams, hosts_map) do
+  defp build_flow(dst_ip, dst_port, datagrams, hosts_map, decoders) do
     server_endpoint = Endpoint.from_tuple({dst_ip, dst_port}, hosts_map)
 
     # For UDP flows, we use from: :any since datagrams may come from multiple sources
@@ -132,10 +136,35 @@ defmodule PcapFileEx.Flows.UDP.Collector do
         datagram =
           UDP.Datagram.new(flow_seq, from_endpoint, to_endpoint, packet.payload, timestamp)
 
+        # Apply custom decoders if any
+        datagram = apply_decoder(datagram, decoders)
+
         UDP.Flow.add_datagram(acc, datagram)
       end)
 
     UDP.Flow.finalize(udp_flow)
+  end
+
+  # Apply custom decoder to a UDP datagram
+  defp apply_decoder(datagram, []), do: datagram
+
+  defp apply_decoder(datagram, decoders) do
+    ctx = %{
+      protocol: :udp,
+      direction: :datagram,
+      port: datagram.to.port,
+      from: datagram.from,
+      to: datagram.to
+    }
+
+    decoded_payload =
+      case DecoderMatcher.find_and_invoke(decoders, ctx, datagram.payload) do
+        {:ok, decoded} -> {:custom, decoded}
+        {:error, reason} -> {:decode_error, reason}
+        :skip -> nil
+      end
+
+    %{datagram | decoded_payload: decoded_payload}
   end
 
   # Decode UDP packet from raw PCAP packet
