@@ -718,6 +718,8 @@ DateTime.compare(packet.timestamp, some_datetime)  # => :lt
 - [Performance Guide](usage-rules/performance.md) - Detailed performance optimization
 - [Filtering Guide](usage-rules/filtering.md) - Complete filtering reference
 - [HTTP Guide](usage-rules/http.md) - HTTP/1.x decoding patterns
+- [HTTP/2 Guide](usage-rules/http2.md) - HTTP/2 cleartext (h2c) analysis patterns
+- [Traffic Flows Guide](usage-rules/flows.md) - Unified traffic flow analysis by protocol
 - [Format Guide](usage-rules/formats.md) - PCAP vs PCAPNG differences
 - [Examples](usage-rules/examples.md) - Complete working examples
 - `PcapFileEx.HTTP2` - HTTP/2 cleartext (h2c) analysis

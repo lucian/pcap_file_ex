@@ -3,6 +3,35 @@
 ## [Unreleased]
 
 ### Added
+- **Traffic Flows API** - Unified API to analyze traffic flows by protocol
+  - New `PcapFileEx.Flows` module with `analyze/2` function
+  - Identifies and groups traffic by protocol: HTTP/1, HTTP/2, UDP
+  - Returns hierarchical `AnalysisResult` with protocol-specific flow containers
+  - Unified timeline for playback with nanosecond-precision ordering
+  - O(1) flow lookups via `FlowKey` struct
+  - Playback timing metadata: `response_delay_ms` for HTTP, `relative_offset_ms` for UDP
+  - New modules:
+    - `PcapFileEx.FlowKey` - Stable identity for flow map lookups
+    - `PcapFileEx.Flow` - Base flow identity with display and authoritative fields
+    - `PcapFileEx.Flows.AnalysisResult` - Result container with flows map, protocol lists, timeline
+    - `PcapFileEx.Flows.TimelineEvent` - Unified timeline event for playback
+    - `PcapFileEx.Flows.Stats` - Flow statistics (packet/byte counts, timestamps, duration)
+    - `PcapFileEx.Flows.ProtocolDetector` - Protocol detection via content inspection
+    - `PcapFileEx.Flows.TCPExtractor` - Shared TCP extraction logic (refactored from HTTP2)
+    - `PcapFileEx.Flows.HTTP1.Analyzer` - HTTP/1.x request/response reconstruction
+    - `PcapFileEx.Flows.HTTP1.Exchange` - HTTP/1 exchange with playback timing
+    - `PcapFileEx.Flows.HTTP1.Flow` - HTTP/1 flow container
+    - `PcapFileEx.Flows.HTTP2.Flow` - HTTP/2 flow wrapper (streams + incomplete)
+    - `PcapFileEx.Flows.HTTP2.Stream` - HTTP/2 stream with seq_num and timing
+    - `PcapFileEx.Flows.HTTP2.Adapter` - Converts HTTP2.Exchange to Flows format
+    - `PcapFileEx.Flows.UDP.Collector` - UDP datagram collection
+    - `PcapFileEx.Flows.UDP.Flow` - UDP flow (grouped by server, `from: :any`)
+    - `PcapFileEx.Flows.UDP.Datagram` - UDP datagram with playback timing
+  - Protocol detection via content inspection:
+    - HTTP/2: Connection preface `"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"`
+    - HTTP/1: Request methods (`GET `, `POST `, etc.) or `HTTP/` response
+  - Full hosts_map support for endpoint resolution
+
 - **Hosts Mapping Feature** - Map IP addresses to human-readable hostnames
   - New `:hosts_map` option on all entry points: `stream/2`, `read_all/2`, `HTTP2.analyze/2`, etc.
   - `PcapFileEx.Endpoint` enhancements:

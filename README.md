@@ -18,6 +18,7 @@ High-performance Elixir library for reading and parsing PCAP (Packet Capture) fi
 - ✅ **TCP Reassembly** - Reassemble HTTP messages split across multiple TCP packets
 - ✅ **HTTP Body Decoding** - Automatic decoding of JSON, ETF, form data, and text bodies
 - ✅ **HTTP/2 Analysis** - Reconstruct HTTP/2 cleartext (h2c) request/response exchanges from PCAP files
+- ✅ **Traffic Flows Analysis** - Unified API to identify and group traffic by protocol (HTTP/1, HTTP/2, UDP)
 - ✅ **Hosts Mapping** - Map IP addresses to human-readable hostnames for easier analysis
 - ✅ **Statistics** - Compute packet counts, sizes, time ranges, and distributions
 - ✅ **Filtering** - Rich DSL for filtering packets by size, time, content
@@ -1563,6 +1564,58 @@ end)
 
 See the `PcapFileEx.HTTP2` module documentation for complete patterns and best practices.
 
+### Traffic Flows Analysis
+
+Analyze PCAP files to identify and group traffic by protocol (HTTP/1, HTTP/2, UDP):
+
+```elixir
+# Analyze a PCAP file for all traffic flows
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng")
+
+# Access flows by protocol
+IO.puts("HTTP/1 flows: #{length(result.http1)}")
+IO.puts("HTTP/2 flows: #{length(result.http2)}")
+IO.puts("UDP flows: #{length(result.udp)}")
+
+# Query specific flows
+result.http2
+|> Enum.filter(fn f -> f.flow.from == "web-client" end)
+|> Enum.flat_map(& &1.streams)
+|> Enum.each(fn stream ->
+  IO.puts("#{stream.exchange.request.method} #{stream.exchange.request.path}")
+end)
+
+# Playback in timeline order
+Enum.each(result.timeline, fn event ->
+  data = PcapFileEx.Flows.AnalysisResult.get_event(result, event)
+  playback(data)
+end)
+
+# With hosts mapping
+hosts = %{
+  "192.168.1.10" => "api-gateway",
+  "192.168.1.20" => "metrics-collector"
+}
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng", hosts_map: hosts)
+
+# O(1) lookup by FlowKey
+key = PcapFileEx.FlowKey.new(:http2, client_endpoint, server_endpoint)
+flow = PcapFileEx.Flows.AnalysisResult.get_flow(result, key)
+```
+
+**Protocol Detection:**
+- **HTTP/2**: Connection preface `"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"`
+- **HTTP/1**: Request methods (`GET `, `POST `, etc.) or `HTTP/` response
+- **UDP**: Collected separately and grouped by destination server
+
+**Features:**
+- ✅ **Unified timeline** - All events sorted chronologically with nanosecond precision
+- ✅ **O(1) flow lookups** - `FlowKey` for efficient flow access by protocol and endpoints
+- ✅ **Playback timing** - `response_delay_ms` for HTTP, `relative_offset_ms` for UDP
+- ✅ **Hosts mapping** - Resolve IPs to human-readable hostnames
+- ✅ **HTTP/1 reconstruction** - Request/response pairing with chunked encoding support
+- ✅ **HTTP/2 integration** - Wraps existing HTTP/2 analyzer with flow metadata
+
 ### Header
 
 ```elixir
@@ -1678,6 +1731,7 @@ PcapFileEx.stream!("huge_10gb.pcap")
 - [x] **Multi-file timeline merge** - Chronologically merge multiple PCAP/PCAPNG files with nanosecond precision, interface remapping, source annotation, and clock validation
 - [x] **PCAP/PCAPNG writer API** - Create, export, filter, and convert captures with format auto-detection, timestamp manipulation, and streaming writes (v0.4.0)
 - [x] **HTTP/2 cleartext analysis** - Reconstruct HTTP/2 (h2c) request/response exchanges with HPACK header decompression
+- [x] **Traffic Flows API** - Unified API to identify and group traffic by protocol (HTTP/1, HTTP/2, UDP) with timeline playback support
 
 ### Planned Features
 - [ ] **Display filter → PreFilter compiler** - Convert Wireshark-style display filters into PreFilter tuples for familiar syntax
