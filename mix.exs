@@ -93,7 +93,12 @@ defmodule PcapFileEx.MixProject do
         "usage-rules/performance.md",
         "usage-rules/filtering.md",
         "usage-rules/http.md",
+        "usage-rules/http2.md",
+        "usage-rules/flows.md",
         "usage-rules/formats.md",
+        "usage-rules/merging.md",
+        "usage-rules/writing.md",
+        "usage-rules/decoder-registry.md",
         "usage-rules/examples.md",
         "LICENSE"
       ],

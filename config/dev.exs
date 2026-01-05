@@ -6,13 +6,14 @@ config :git_hooks,
   auto_install: true,
   verbose: true,
   hooks: [
-    # Pre-commit: Fast checks (~5-10 seconds)
-    # These run before every commit to catch formatting and linting issues early
+    # Pre-commit: Fast checks (~10-15 seconds)
+    # These run before every commit to catch formatting, linting, and docs issues early
     pre_commit: [
       tasks: [
         {:mix_task, :format, ["--check-formatted"]},
         {:cmd, "cargo fmt --manifest-path=native/pcap_file_ex/Cargo.toml --all --check"},
-        {:mix_task, :credo, ["--strict"]}
+        {:mix_task, :credo, ["--strict"]},
+        {:cmd, "mix docs --warnings-as-errors"}
       ]
     ],
 
@@ -24,8 +25,7 @@ config :git_hooks,
         {:mix_task, :dialyzer},
         {:cmd, "cargo clippy --manifest-path=native/pcap_file_ex/Cargo.toml -- -Dwarnings"},
         {:cmd,
-         "if command -v cargo-deny >/dev/null 2>&1; then cd native/pcap_file_ex && cargo deny check advisories licenses; else echo '⚠️  cargo-deny not installed. Run: mix setup'; fi"},
-        {:cmd, "mix docs --warnings-as-errors"}
+         "if command -v cargo-deny >/dev/null 2>&1; then cd native/pcap_file_ex && cargo deny check advisories licenses; else echo '⚠️  cargo-deny not installed. Run: mix setup'; fi"}
       ]
     ]
   ]
