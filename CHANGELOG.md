@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.5.5] - 2026-01-06
 
 ### Added
 - **Custom Decoders for Flows API** - Register custom decoders for protocol-specific payloads
