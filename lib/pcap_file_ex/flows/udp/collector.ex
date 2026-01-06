@@ -35,6 +35,8 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   - `opts` - Options:
     - `:hosts_map` - Map of IP strings to hostnames
     - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
+    - `:keep_binary` - When `true`, preserve original binary in `payload_binary`
+      when custom decoders are invoked (default: `false`)
 
   ## Returns
 
@@ -54,12 +56,13 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   def collect(packets, opts \\ []) do
     hosts_map = Keyword.get(opts, :hosts_map, %{})
     decoders = Keyword.get(opts, :decoders, [])
+    keep_binary = Keyword.get(opts, :keep_binary, false)
 
     flows =
       packets
       |> Enum.group_by(&{&1.dst_ip, &1.dst_port})
       |> Enum.map(fn {{dst_ip, dst_port}, datagrams} ->
-        build_flow(dst_ip, dst_port, datagrams, hosts_map, decoders)
+        build_flow(dst_ip, dst_port, datagrams, hosts_map, decoders, keep_binary)
       end)
       |> Enum.sort_by(fn flow ->
         case flow.datagrams do
@@ -81,6 +84,8 @@ defmodule PcapFileEx.Flows.UDP.Collector do
     - `:port` - Filter to specific UDP port
     - `:hosts_map` - Map of IP strings to hostnames
     - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
+    - `:keep_binary` - When `true`, preserve original binary in `payload_binary`
+      when custom decoders are invoked (default: `false`)
 
   ## Returns
 
@@ -91,6 +96,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
     port_filter = Keyword.get(opts, :port)
     hosts_map = Keyword.get(opts, :hosts_map, %{})
     decoders = Keyword.get(opts, :decoders, [])
+    keep_binary = Keyword.get(opts, :keep_binary, false)
 
     case PcapFileEx.stream(pcap_path) do
       {:ok, stream} ->
@@ -108,7 +114,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
           end)
           |> Enum.to_list()
 
-        collect(packets, hosts_map: hosts_map, decoders: decoders)
+        collect(packets, hosts_map: hosts_map, decoders: decoders, keep_binary: keep_binary)
 
       {:error, reason} ->
         {:error, reason}
@@ -116,7 +122,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   end
 
   # Build a UDP flow from datagrams to the same destination
-  defp build_flow(dst_ip, dst_port, datagrams, hosts_map, decoders) do
+  defp build_flow(dst_ip, dst_port, datagrams, hosts_map, decoders, keep_binary) do
     server_endpoint = Endpoint.from_tuple({dst_ip, dst_port}, hosts_map)
 
     # For UDP flows, we use from: :any since datagrams may come from multiple sources
@@ -137,7 +143,7 @@ defmodule PcapFileEx.Flows.UDP.Collector do
           UDP.Datagram.new(flow_seq, from_endpoint, to_endpoint, packet.payload, timestamp)
 
         # Apply custom decoders if any
-        datagram = apply_decoder(datagram, decoders)
+        datagram = apply_decoder(datagram, decoders, keep_binary)
 
         UDP.Flow.add_datagram(acc, datagram)
       end)
@@ -146,9 +152,10 @@ defmodule PcapFileEx.Flows.UDP.Collector do
   end
 
   # Apply custom decoder to a UDP datagram
-  defp apply_decoder(datagram, []), do: datagram
+  # No decoders: payload stays as raw binary
+  defp apply_decoder(datagram, [], _keep_binary), do: datagram
 
-  defp apply_decoder(datagram, decoders) do
+  defp apply_decoder(datagram, decoders, keep_binary) do
     ctx = %{
       protocol: :udp,
       direction: :datagram,
@@ -157,15 +164,32 @@ defmodule PcapFileEx.Flows.UDP.Collector do
       to: datagram.to
     }
 
-    decoded_payload =
-      case DecoderMatcher.find_and_invoke(decoders, ctx, datagram.payload) do
-        {:ok, decoded} -> {:custom, decoded}
-        {:error, reason} -> {:decode_error, reason}
-        :skip -> nil
-      end
+    raw_payload = datagram.payload
 
-    %{datagram | decoded_payload: decoded_payload}
+    case DecoderMatcher.find_and_invoke(decoders, ctx, raw_payload) do
+      {:ok, decoded} ->
+        datagram
+        |> Map.put(:payload, {:custom, decoded})
+        |> maybe_preserve_binary(raw_payload, keep_binary)
+
+      {:error, reason} ->
+        datagram
+        |> Map.put(:payload, {:decode_error, reason})
+        |> maybe_preserve_binary(raw_payload, keep_binary)
+
+      :skip ->
+        # :skip is semantically equivalent to "no decoder matched"
+        # payload stays as raw binary, no payload_binary
+        datagram
+    end
   end
+
+  # Preserve original binary when keep_binary: true and decoder was invoked
+  defp maybe_preserve_binary(datagram, raw_payload, true),
+    do: %{datagram | payload_binary: raw_payload}
+
+  defp maybe_preserve_binary(datagram, _raw_payload, false),
+    do: datagram
 
   # Decode UDP packet from raw PCAP packet
   defp decode_udp_packet(packet) do

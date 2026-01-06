@@ -47,8 +47,11 @@ However, users working with domain-specific protocols need to:
 #   hosts_map: %{ip_string => hostname_string}
 #   decode_content: boolean (default: true)
 #
-# New option:
+# New options:
 #   decoders: [decoder_spec()]
+#   keep_binary: boolean (default: false) - Preserve original binary when
+#     custom decoders transform content. Stored in `payload_binary` (UDP)
+#     or `body_binary` (multipart parts). WARNING: Doubles memory for decoded content.
 ```
 
 ### Decoder Specification Types
@@ -428,7 +431,7 @@ When a candidate decoder matches (protocol + match criteria satisfied), it is in
      - `{:ok, term}` → stored as `{:custom, term}`
      - `{:error, reason}` → stored as `{:decode_error, reason}` (terminal)
      - `:skip` → continue to next matching decoder
-3. Result is stored in appropriate `decoded_body` or `decoded_payload` field
+3. Result is stored in `decoded_body` (HTTP) or `payload` (UDP)
 
 **Note**: `{:error, reason}` is terminal—the system does NOT continue to other decoders.
 Use `:skip` (arity-2 only) if you want to decline and let other decoders try.
@@ -483,9 +486,9 @@ Custom decoders run ONLY on parts where built-in decoding yields `{:binary, _}`:
    - `:skip` → continue to next matching decoder
    - `{:error, reason}` → terminal, stored as `{:decode_error, reason}`, no further decoders tried
    - `{:ok, term}` or non-error term → stored as `{:custom, term}`, done
-2. If no decoder matches or all return `:skip`: `decoded_payload = nil`
-   (Unlike HTTP, UDP has no built-in decoding, so nil indicates "no custom decoding applied"
-   rather than `{:binary, payload}` which would duplicate the `payload` field)
+2. If no decoder matches or all return `:skip`: `payload` remains raw binary
+   (Unlike HTTP which uses `{:binary, payload}`, UDP payload is already binary,
+   so no wrapper is needed. The `payload_binary` field remains nil.)
 
 ### :skip Behavior
 
@@ -500,7 +503,7 @@ decoder_3 matches, returns {:ok, data} → use {:custom, data}
 
 **Fallback when no decoder handles:**
 - **HTTP bodies/parts**: `{:binary, payload}`
-- **UDP datagrams**: `decoded_payload = nil`
+- **UDP datagrams**: `payload` remains raw binary (no `payload_binary`)
 
 **Contrast with {:error, reason}:**
 ```
@@ -537,35 +540,75 @@ end
 
 ## Data Structure Changes
 
-### UDP Datagram
+### UDP Datagram (BREAKING CHANGE)
+
+The datagram structure has been **restructured** for consistency with HTTP multipart parts:
 
 ```elixir
 defmodule PcapFileEx.Flows.UDP.Datagram do
+  @type decoded :: {:custom, term()} | {:decode_error, term()}
+
   @type t :: %__MODULE__{
     flow_seq: non_neg_integer(),
     from: Endpoint.t(),
     to: Endpoint.t(),
-    payload: binary(),
-    decoded_payload: term() | nil,  # NEW: Custom decoder result
+    payload: decoded() | binary(),      # CHANGED: decoded or raw binary
+    payload_binary: binary() | nil,     # NEW: original binary (when keep_binary: true)
     timestamp: Timestamp.t(),
     size: non_neg_integer(),
     relative_offset_ms: non_neg_integer()
   }
+  # NOTE: decoded_payload field has been REMOVED
+end
+```
+
+**Payload states:**
+- **No decoders configured** → `payload` = raw binary, `payload_binary` = nil
+- **Decoder returns `:skip`** → Same as no decoder (raw binary, no `payload_binary`)
+- **Decoder returns `{:ok, _}`** → `payload` = `{:custom, decoded}`, `payload_binary` = raw (if `keep_binary: true`)
+- **Decoder returns `{:error, _}`** → `payload` = `{:decode_error, reason}`, `payload_binary` = raw (if `keep_binary: true`)
+
+**Migration:**
+```elixir
+# Before (OLD API - no longer works)
+case datagram.decoded_payload do
+  {:custom, data} -> handle(data)
+  nil -> handle_raw(datagram.payload)
+end
+
+# After (NEW API)
+case datagram.payload do
+  {:custom, data} ->
+    handle_decoded(data)
+    # For playback: datagram.payload_binary (if keep_binary: true)
+
+  {:decode_error, reason} ->
+    handle_error(reason)
+    # Recovery: datagram.payload_binary (if keep_binary: true)
+
+  raw when is_binary(raw) ->
+    handle_raw(raw)
+    # Note: payload_binary is nil in this case
 end
 ```
 
 ### HTTP Multipart Part
 
-The existing multipart part structure already has `body: decoded()` which supports custom decoded values:
+The existing multipart part structure now supports optional `body_binary`:
 
 ```elixir
 @type part :: %{
-  content_type: String.t(),
-  content_id: String.t() | nil,
-  headers: %{String.t() => String.t()},
-  body: decoded()  # Can now be {:custom, term()} from custom decoder
+  required(:content_type) => String.t(),
+  required(:content_id) => String.t() | nil,
+  required(:headers) => %{String.t() => String.t()},
+  required(:body) => decoded(),  # Can be {:custom, term()} from custom decoder
+  optional(:body_binary) => binary()  # NEW: original binary (when keep_binary: true)
 }
 ```
+
+**`body_binary` is only present when:**
+1. `keep_binary: true` option was passed
+2. A custom decoder was invoked (returned `{:ok, _}` or `{:error, _}`, NOT `:skip`)
 
 ## Module Structure
 
@@ -601,9 +644,11 @@ lib/pcap_file_ex/
 ## Backwards Compatibility
 
 - Default `decoders: []` preserves current behavior
+- Default `keep_binary: false` preserves current behavior (no memory overhead)
 - Existing `decode_content: true/false` still works
 - Built-in decoders remain unchanged
-- New `decoded_payload` field in UDP.Datagram is additive
+- **BREAKING**: UDP Datagram `decoded_payload` field removed, `payload` type changed
+- HTTP multipart parts gain optional `body_binary` field (non-breaking)
 
 ## Future Extensions
 

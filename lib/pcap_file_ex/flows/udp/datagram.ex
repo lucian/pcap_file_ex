@@ -10,20 +10,29 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
   - `flow_seq` - Index within the flow's datagram list (0-based)
   - `from` - Source endpoint
   - `to` - Destination endpoint
-  - `payload` - UDP payload binary
-  - `decoded_payload` - Custom decoder result, or `nil` if no decoder matched
+  - `payload` - UDP payload (raw binary or decoded tagged tuple)
+  - `payload_binary` - Original binary when `keep_binary: true` and decoder was invoked
   - `timestamp` - Datagram timestamp (nanosecond precision)
   - `relative_offset_ms` - Offset from flow start (for playback)
   - `size` - Payload size in bytes
 
-  ## Custom Decoding
+  ## Payload States
 
-  When custom decoders are registered via `PcapFileEx.Flows.analyze/2`, the
-  `decoded_payload` field contains the result:
+  The `payload` field can be:
 
+  - **Raw binary** - No decoders configured, or decoder returned `:skip`
   - `{:custom, term}` - Custom decoder succeeded
   - `{:decode_error, reason}` - Custom decoder failed
-  - `nil` - No decoder matched or no decoders registered
+
+  ## Binary Preservation
+
+  When `keep_binary: true` is passed to `PcapFileEx.Flows.analyze/2` and a
+  custom decoder was invoked (success or error), `payload_binary` contains
+  the original binary for playback scenarios.
+
+  **Important:** `payload_binary` is only set when a decoder was *invoked*.
+  If no decoder matched or decoder returned `:skip`, `payload` remains raw
+  binary and `payload_binary` is `nil`.
 
   ## Playback Timing
 
@@ -35,6 +44,21 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
 
   ## Examples
 
+      # Pattern match on payload
+      case datagram.payload do
+        {:custom, decoded} ->
+          handle_decoded(decoded)
+          # For playback: datagram.payload_binary (if keep_binary: true)
+
+        {:decode_error, reason} ->
+          Logger.warning("Decode failed: \#{inspect(reason)}")
+          # Recovery: datagram.payload_binary (if keep_binary: true)
+
+        raw when is_binary(raw) ->
+          handle_raw(raw)
+          # Note: payload_binary is nil in this case
+      end
+
       # Stream datagrams with proper timing
       start_time = System.monotonic_time(:millisecond)
 
@@ -44,7 +68,12 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
         remaining = dg.relative_offset_ms - elapsed
         if remaining > 0, do: Process.sleep(remaining)
 
-        send_udp(dg.to, dg.payload)
+        # Get raw binary for sending
+        raw = case dg.payload do
+          binary when is_binary(binary) -> binary
+          _decoded -> dg.payload_binary
+        end
+        send_udp(dg.to, raw)
       end)
   """
 
@@ -56,18 +85,21 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
     :from,
     :to,
     :payload,
-    :decoded_payload,
+    :payload_binary,
     :timestamp,
     :size,
     relative_offset_ms: 0
   ]
 
+  @typedoc "Decoded payload from custom decoder"
+  @type decoded :: {:custom, term()} | {:decode_error, term()}
+
   @type t :: %__MODULE__{
           flow_seq: non_neg_integer(),
           from: Endpoint.t(),
           to: Endpoint.t(),
-          payload: binary(),
-          decoded_payload: {:custom, term()} | {:decode_error, term()} | nil,
+          payload: decoded() | binary(),
+          payload_binary: binary() | nil,
           timestamp: Timestamp.t(),
           relative_offset_ms: non_neg_integer(),
           size: non_neg_integer()
@@ -104,7 +136,7 @@ defmodule PcapFileEx.Flows.UDP.Datagram do
       from: from,
       to: to,
       payload: payload,
-      decoded_payload: nil,
+      payload_binary: nil,
       timestamp: timestamp,
       size: byte_size(payload),
       relative_offset_ms: 0

@@ -25,12 +25,12 @@ decoder = %{
   decoders: [decoder]
 )
 
-# Access decoded payload
+# Access decoded payload (BREAKING: payload type changed in v0.6.0)
 datagram = hd(hd(result.udp).datagrams)
-case datagram.decoded_payload do
+case datagram.payload do
   {:custom, data} -> IO.inspect(data)
   {:decode_error, reason} -> IO.puts("Error: #{inspect(reason)}")
-  nil -> IO.puts("No decoder matched")
+  raw when is_binary(raw) -> IO.puts("No decoder matched")
 end
 ```
 
@@ -235,7 +235,7 @@ Each part follows the same pipeline:
 ### UDP Datagrams
 
 1. **Custom decoders** (first match)
-2. No fallback (`decoded_payload` remains `nil`)
+2. No fallback (payload remains raw binary)
 
 ## Result Wrapping
 
@@ -332,13 +332,15 @@ Decoder errors are stored, not raised:
 # Check for decode errors in UDP
 Enum.each(result.udp, fn flow ->
   Enum.each(flow.datagrams, fn dg ->
-    case dg.decoded_payload do
+    case dg.payload do
       {:decode_error, %{exception: e}} ->
         Logger.error("Decoder crashed: #{inspect(e)}")
       {:decode_error, reason} ->
         Logger.warning("Decode failed: #{inspect(reason)}")
-      _ ->
-        :ok
+      {:custom, _data} ->
+        :ok  # Successfully decoded
+      raw when is_binary(raw) ->
+        :ok  # No decoder matched
     end
   end)
 end)
@@ -394,3 +396,112 @@ decoders: [
 ```
 
 For `:skip` returns, evaluation continues to the next matching decoder.
+
+## Binary Preservation
+
+When using custom decoders, you may need both the decoded data (for analysis) and the original binary (for playback/replay). The `keep_binary` option preserves the original binary alongside the decoded content.
+
+### Usage
+
+```elixir
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
+  decoders: [my_decoder],
+  keep_binary: true  # Preserve original binary
+)
+```
+
+### UDP Datagrams
+
+When a custom decoder transforms a UDP datagram:
+
+```elixir
+datagram = hd(hd(result.udp).datagrams)
+
+case datagram.payload do
+  {:custom, decoded_data} ->
+    # Decoded content for analysis
+    IO.inspect(decoded_data)
+
+    # Original binary for playback (only when keep_binary: true)
+    if datagram.payload_binary do
+      replay(datagram.payload_binary)
+    end
+
+  {:decode_error, reason} ->
+    # Decoder failed, but binary preserved for debugging
+    Logger.error("Decode failed: #{inspect(reason)}")
+    if datagram.payload_binary do
+      debug_binary(datagram.payload_binary)
+    end
+
+  raw when is_binary(raw) ->
+    # No decoder matched - raw binary in payload, no payload_binary
+    replay(raw)
+end
+```
+
+**Key invariants:**
+- `payload_binary` is ONLY set when a custom decoder was invoked AND `keep_binary: true`
+- `:skip` returns don't set `payload_binary` (equivalent to "no decoder matched")
+- When no decoder matches, `payload` is raw binary, `payload_binary` is nil
+
+### Multipart Parts
+
+For HTTP multipart responses with custom decoders:
+
+```elixir
+case exchange.response.decoded_body do
+  {:multipart, parts} ->
+    Enum.each(parts, fn part ->
+      case part.body do
+        {:custom, decoded_data} ->
+          # Decoded content
+          IO.inspect(decoded_data)
+          # Original binary (only when keep_binary: true)
+          if part.body_binary, do: replay(part.body_binary)
+
+        {:decode_error, reason} ->
+          Logger.error("Part decode failed: #{inspect(reason)}")
+          # Binary preserved for debugging
+          if part.body_binary, do: debug(part.body_binary)
+
+        other ->
+          # Built-in decoded ({:json, _}, {:text, _}, {:binary, _})
+          # No body_binary field
+          IO.inspect(other)
+      end
+    end)
+  _ ->
+    :ok
+end
+```
+
+### Playback Helper
+
+```elixir
+@doc "Get raw binary for playback. Returns nil if not preserved."
+def get_raw_payload(datagram) do
+  case datagram.payload do
+    raw when is_binary(raw) -> raw
+    _decoded -> datagram.payload_binary
+  end
+end
+
+# Usage
+case get_raw_payload(datagram) do
+  nil -> raise "Binary not preserved. Use keep_binary: true"
+  raw -> send_to_server(raw)
+end
+```
+
+### Memory Warning
+
+`keep_binary: true` doubles memory for decoded content:
+
+- UDP datagram with 1KB payload → ~2KB memory
+- Multipart part with 10KB binary → ~20KB memory
+
+**Recommendations:**
+- Only use `keep_binary: true` when playback/replay is needed
+- Default `keep_binary: false` avoids this overhead
+- For large captures, consider streaming with selective processing

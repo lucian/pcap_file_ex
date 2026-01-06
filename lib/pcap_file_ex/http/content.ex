@@ -44,11 +44,18 @@ defmodule PcapFileEx.HTTP.Content do
           | {:custom, term()}
           | {:decode_error, term()}
 
+  @typedoc """
+  A multipart part with decoded body.
+
+  When `keep_binary: true` is passed and a custom decoder was invoked
+  (success or error), `body_binary` contains the original binary.
+  """
   @type part :: %{
-          content_type: String.t(),
-          content_id: String.t() | nil,
-          headers: %{String.t() => String.t()},
-          body: decoded()
+          required(:content_type) => String.t(),
+          required(:content_id) => String.t() | nil,
+          required(:headers) => %{String.t() => String.t()},
+          required(:body) => decoded(),
+          optional(:body_binary) => binary()
         }
 
   @type raw_part :: %{
@@ -71,6 +78,8 @@ defmodule PcapFileEx.HTTP.Content do
 
   - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
   - `:context` - Base context for decoder matching (protocol, direction, headers, etc.)
+  - `:keep_binary` - When `true`, preserve original binary in multipart parts'
+    `body_binary` field when custom decoders are invoked (default: `false`)
 
   ## Examples
 
@@ -255,11 +264,13 @@ defmodule PcapFileEx.HTTP.Content do
     with {:ok, boundary} <- extract_boundary(content_type),
          {:ok, parts} <- parse_parts(body, boundary) do
       base_ctx = Keyword.get(opts, :context, %{})
+      keep_binary = Keyword.get(opts, :keep_binary, false)
 
       decoded_parts =
         Enum.map(parts, fn part ->
           part_ct = Map.get(part.headers, "content-type", "application/octet-stream")
           content_id = Map.get(part.headers, "content-id")
+          raw_body = part.body
 
           # Build part-specific context for custom decoders
           # Override headers with part's own headers (not parent request/response headers)
@@ -271,14 +282,23 @@ defmodule PcapFileEx.HTTP.Content do
             |> Map.put(:headers, part.headers)
 
           part_opts = Keyword.put(opts, :context, part_ctx)
-          decoded_body = decode(part_ct, part.body, part_opts)
+          decoded_body = decode(part_ct, raw_body, part_opts)
 
-          %{
+          base_part = %{
             content_type: part_ct,
             content_id: content_id,
             headers: part.headers,
             body: decoded_body
           }
+
+          # Add body_binary only when:
+          # 1. keep_binary: true
+          # 2. Custom decoder was invoked (success OR error)
+          if keep_binary and custom_decoder_invoked?(decoded_body) do
+            Map.put(base_part, :body_binary, raw_body)
+          else
+            base_part
+          end
         end)
 
       {:multipart, decoded_parts}
@@ -287,6 +307,13 @@ defmodule PcapFileEx.HTTP.Content do
       {:error, _} -> try_custom_or_binary(content_type, body, opts)
     end
   end
+
+  # Custom decoder was invoked: result is {:custom, _} or {:decode_error, _}
+  # Note: {:decode_error, _} means a CUSTOM decoder was invoked and failed,
+  # not a built-in decoding error. Built-in failures yield {:binary, _}.
+  defp custom_decoder_invoked?({:custom, _}), do: true
+  defp custom_decoder_invoked?({:decode_error, _}), do: true
+  defp custom_decoder_invoked?(_), do: false
 
   defp skip_to_first_delimiter(body, first_delimiter) do
     case :binary.match(body, first_delimiter) do

@@ -52,6 +52,8 @@ defmodule PcapFileEx.HTTP2 do
     raw binaries and `decoded_body` is `nil`.
   - `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution.
   - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
+  - `:keep_binary` - When `true`, preserve original binary in multipart parts'
+    `body_binary` field when custom decoders are invoked (default: `false`)
 
   ## Example
 
@@ -78,6 +80,7 @@ defmodule PcapFileEx.HTTP2 do
     decode_content = Keyword.get(opts, :decode_content, true)
     hosts_map = Keyword.get(opts, :hosts_map, %{})
     decoders = Keyword.get(opts, :decoders, [])
+    keep_binary = Keyword.get(opts, :keep_binary, false)
 
     with {:ok, segments} <- TCPExtractor.extract(pcap_path, port: port_filter) do
       # Filter to likely HTTP/2 flows (those with preface or on common ports)
@@ -86,7 +89,8 @@ defmodule PcapFileEx.HTTP2 do
       Analyzer.analyze(http2_segments,
         decode_content: decode_content,
         hosts_map: hosts_map,
-        decoders: decoders
+        decoders: decoders,
+        keep_binary: keep_binary
       )
     end
   end

@@ -50,6 +50,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
           {:decode_content, boolean()}
           | {:hosts_map, PcapFileEx.Endpoint.hosts_map()}
           | {:decoders, [PcapFileEx.Flows.Decoder.decoder_spec()]}
+          | {:keep_binary, boolean()}
 
   @doc """
   Analyze directional TCP segments and extract HTTP/2 exchanges.
@@ -64,6 +65,8 @@ defmodule PcapFileEx.HTTP2.Analyzer do
       When `false`, bodies are left as raw binaries and `decoded_body` is `nil`.
     * `:hosts_map` - Map of IP address strings to hostname strings for endpoint resolution.
     * `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
+    * `:keep_binary` - When `true`, preserve original binary in multipart parts'
+      `body_binary` field when custom decoders are invoked (default: `false`)
   """
   @spec analyze([directional_segment()], [option()]) ::
           {:ok, [Exchange.t()], [IncompleteExchange.t()]}
@@ -71,6 +74,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
     decode_content = Keyword.get(opts, :decode_content, true)
     hosts_map = Keyword.get(opts, :hosts_map, %{})
     decoders = Keyword.get(opts, :decoders, [])
+    keep_binary = Keyword.get(opts, :keep_binary, false)
 
     # Process all segments, building connection state
     connections =
@@ -82,7 +86,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
     {complete, incomplete} =
       connections
       |> Map.values()
-      |> Enum.flat_map(&finalize_connection(&1, decode_content, hosts_map, decoders))
+      |> Enum.flat_map(&finalize_connection(&1, decode_content, hosts_map, decoders, keep_binary))
       |> Enum.split_with(fn
         %Exchange{} -> true
         %IncompleteExchange{} -> false
@@ -438,7 +442,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
   end
 
   # Finalize a connection - mark truncated streams and build exchanges
-  defp finalize_connection(%Connection{} = conn, decode_content, hosts_map, decoders) do
+  defp finalize_connection(%Connection{} = conn, decode_content, hosts_map, decoders, keep_binary) do
     tcp_flow = {conn.client || elem(conn.flow_key, 0), conn.server || elem(conn.flow_key, 1)}
 
     exchange_opts = [
@@ -453,7 +457,10 @@ defmodule PcapFileEx.HTTP2.Analyzer do
 
       if StreamState.complete?(stream) and not stream.terminated do
         exchange = Exchange.from_stream(stream, tcp_flow, exchange_opts)
-        if decode_content, do: decode_exchange_content(exchange, decoders), else: exchange
+
+        if decode_content,
+          do: decode_exchange_content(exchange, decoders, keep_binary),
+          else: exchange
       else
         IncompleteExchange.from_stream(stream, tcp_flow, exchange_opts)
       end
@@ -462,13 +469,19 @@ defmodule PcapFileEx.HTTP2.Analyzer do
   end
 
   # Decode request and response bodies based on Content-Type
-  defp decode_exchange_content(%Exchange{} = exchange, decoders) do
-    request = decode_body(exchange.request, :request, decoders, exchange)
-    response = decode_body(exchange.response, :response, decoders, exchange)
+  defp decode_exchange_content(%Exchange{} = exchange, decoders, keep_binary) do
+    request = decode_body(exchange.request, :request, decoders, exchange, keep_binary)
+    response = decode_body(exchange.response, :response, decoders, exchange, keep_binary)
     %{exchange | request: request, response: response}
   end
 
-  defp decode_body(%{headers: headers, body: body} = data, direction, decoders, exchange) do
+  defp decode_body(
+         %{headers: headers, body: body} = data,
+         direction,
+         decoders,
+         exchange,
+         keep_binary
+       ) do
     content_type = Headers.get(headers, "content-type")
     # Build context for custom decoders - normalize headers to %{String.t() => String.t()}
     headers_map = normalize_headers_map(headers)
@@ -485,7 +498,7 @@ defmodule PcapFileEx.HTTP2.Analyzer do
     ctx =
       if direction == :response, do: Map.put(ctx, :status, exchange.response.status), else: ctx
 
-    opts = [decoders: decoders, context: ctx]
+    opts = [decoders: decoders, context: ctx, keep_binary: keep_binary]
     decoded = Content.decode(content_type, body, opts)
     %{data | decoded_body: decoded}
   end

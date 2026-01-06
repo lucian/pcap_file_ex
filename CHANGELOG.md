@@ -19,7 +19,10 @@
   - Result wrapping: `{:custom, term}` for success, `{:decode_error, reason}` for failure
   - "Binary only" focus: Custom decoders do not override built-in JSON/text decoding
   - Full context passed to decoders: protocol, direction, scope, headers, method, path, status
-  - UDP datagrams gain `decoded_payload` field
+- **Binary Preservation** - New `keep_binary: true` option for playback scenarios
+  - Preserves original binary in `payload_binary` (UDP) or `body_binary` (multipart parts)
+  - Only when custom decoder was invoked (success or error), not for `:skip` or built-in decoders
+  - Warning: Doubles memory for decoded content
 
 - **Traffic Flows API** - Unified API to analyze traffic flows by protocol
   - New `PcapFileEx.Flows` module with `analyze/2` function
@@ -63,6 +66,33 @@
   - Uses `:inet.ntoa/1` everywhere for consistent IP string formatting
 
 ### Breaking
+- **UDP Datagram structure changed** (for consistency with multipart parts)
+  - `decoded_payload` field REMOVED
+  - `payload` field type changed from `binary()` to `decoded() | binary()` where `decoded() = {:custom, term()} | {:decode_error, term()}`
+  - New `payload_binary` field: `binary() | nil` (only set when `keep_binary: true` AND decoder matched/errored)
+  - `:skip` returns are semantically equivalent to "no decoder" (raw payload, no `payload_binary`)
+  - **Migration:**
+    ```elixir
+    # Before
+    case datagram.decoded_payload do
+      {:custom, data} -> handle_decoded(data)
+      nil -> handle_raw(datagram.payload)
+    end
+
+    # After (comprehensive pattern matching)
+    case datagram.payload do
+      {:custom, data} ->
+        handle_decoded(data)
+        # For playback: datagram.payload_binary (if keep_binary: true)
+      {:decode_error, reason} ->
+        Logger.warning("Decode failed: #{inspect(reason)}")
+        # Recovery: datagram.payload_binary (if keep_binary: true)
+      raw when is_binary(raw) ->
+        handle_raw(raw)
+        # Note: payload_binary is nil in this case
+    end
+    ```
+
 - **HTTP/2 Exchange and IncompleteExchange struct changes**
   - Removed `tcp_flow` field (was `{endpoint(), endpoint()}` tuple)
   - Added four new endpoint fields:

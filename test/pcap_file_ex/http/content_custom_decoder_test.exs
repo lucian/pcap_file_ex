@@ -327,4 +327,216 @@ defmodule PcapFileEx.HTTP.ContentCustomDecoderTest do
       refute Map.has_key?(part_ctx.headers, "x-parent")
     end
   end
+
+  describe "keep_binary option" do
+    test "keep_binary: false (default) does not add body_binary to multipart parts" do
+      decoder = %{
+        protocol: :http1,
+        match: %{scope: :multipart_part, content_type: "application/x-custom"},
+        decoder: fn payload -> {:decoded_part, payload} end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: false]
+
+      multipart_body = """
+      --boundary\r
+      Content-Type: application/x-custom\r
+      \r
+      custom data\r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      assert {:custom, {:decoded_part, "custom data"}} = part.body
+      refute Map.has_key?(part, :body_binary)
+    end
+
+    test "keep_binary: true adds body_binary when custom decoder is invoked (success)" do
+      decoder = %{
+        protocol: :http1,
+        match: %{scope: :multipart_part, content_type: "application/x-custom"},
+        decoder: fn payload -> {:decoded_part, payload} end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: true]
+
+      multipart_body = """
+      --boundary\r
+      Content-Type: application/x-custom\r
+      \r
+      custom data\r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      assert {:custom, {:decoded_part, "custom data"}} = part.body
+      assert part.body_binary == "custom data"
+    end
+
+    test "keep_binary: true adds body_binary when custom decoder returns error" do
+      decoder = %{
+        protocol: :http1,
+        match: %{scope: :multipart_part, content_type: "application/x-custom"},
+        decoder: fn _payload -> {:error, :parse_failed} end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: true]
+
+      multipart_body = """
+      --boundary\r
+      Content-Type: application/x-custom\r
+      \r
+      bad data\r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      assert {:decode_error, :parse_failed} = part.body
+      assert part.body_binary == "bad data"
+    end
+
+    test "keep_binary: true does NOT add body_binary to JSON parts (built-in decoder)" do
+      decoder = %{
+        protocol: :http1,
+        match: %{scope: :multipart_part},
+        decoder: fn _payload -> :should_not_be_called end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: true]
+
+      multipart_body = """
+      --boundary\r
+      Content-Type: application/json\r
+      \r
+      {"key":"value"}\r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      assert {:json, %{"key" => "value"}} = part.body
+      # JSON is built-in decoder, not custom - no body_binary
+      refute Map.has_key?(part, :body_binary)
+    end
+
+    test "keep_binary: true does NOT add body_binary to text parts (built-in decoder)" do
+      decoder = %{
+        protocol: :http1,
+        match: %{scope: :multipart_part},
+        decoder: fn _payload -> :should_not_be_called end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: true]
+
+      multipart_body = """
+      --boundary\r
+      Content-Type: text/plain\r
+      \r
+      hello world\r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      assert {:text, "hello world"} = part.body
+      # text is built-in decoder, not custom - no body_binary
+      refute Map.has_key?(part, :body_binary)
+    end
+
+    test "keep_binary: true does NOT add body_binary when decoder returns :skip" do
+      decoder = %{
+        protocol: :http1,
+        match: %{scope: :multipart_part},
+        decoder: fn _ctx, _payload -> :skip end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: true]
+
+      multipart_body = """
+      --boundary\r
+      Content-Type: application/octet-stream\r
+      \r
+      binary data\r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      # Decoder returned :skip, so binary fallback, not custom
+      assert {:binary, "binary data"} = part.body
+      # :skip means decoder was NOT invoked in meaningful way - no body_binary
+      refute Map.has_key?(part, :body_binary)
+    end
+
+    test "keep_binary: true does NOT add body_binary when no decoder matches" do
+      # Decoder only matches HTTP/2, not HTTP/1
+      decoder = %{
+        protocol: :http2,
+        match: %{scope: :multipart_part},
+        decoder: fn payload -> {:decoded, payload} end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: true]
+
+      multipart_body = """
+      --boundary\r
+      Content-Type: application/octet-stream\r
+      \r
+      binary data\r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      # No decoder matched - binary fallback
+      assert {:binary, "binary data"} = part.body
+      # No decoder invoked - no body_binary
+      refute Map.has_key?(part, :body_binary)
+    end
+
+    test "keep_binary preserves exact binary including any leading/trailing whitespace" do
+      decoder = %{
+        protocol: :http1,
+        match: %{scope: :multipart_part, content_type: "application/x-custom"},
+        decoder: fn payload -> {:decoded, String.trim(payload)} end
+      }
+
+      ctx = %{protocol: :http1, direction: :request, scope: :body}
+      opts = [decoders: [decoder], context: ctx, keep_binary: true]
+
+      # Note: the part body will have "  spaced data  " (with spaces)
+      multipart_body = """
+      --boundary\r
+      Content-Type: application/x-custom\r
+      \r
+        spaced data  \r
+      --boundary--\
+      """
+
+      result = Content.decode("multipart/related; boundary=boundary", multipart_body, opts)
+
+      assert {:multipart, [part]} = result
+      # Decoder trimmed the data
+      assert {:custom, {:decoded, "spaced data"}} = part.body
+      # But body_binary preserves exact original
+      assert part.body_binary == "  spaced data  "
+    end
+  end
 end

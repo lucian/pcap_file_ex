@@ -1645,10 +1645,10 @@ ngap_decoder = %{
 
 # Access decoded UDP payload
 datagram = hd(hd(result.udp).datagrams)
-case datagram.decoded_payload do
+case datagram.payload do
   {:custom, data} -> IO.inspect(data)
   {:decode_error, reason} -> IO.puts("Failed: #{inspect(reason)}")
-  nil -> IO.puts("No decoder matched")
+  raw when is_binary(raw) -> IO.puts("No decoder matched")
 end
 
 # Access decoded HTTP multipart part
@@ -1670,6 +1670,37 @@ end
 - **Result wrapping**: Decoded values wrapped as `{:custom, term}` to distinguish from built-in decoding
 - **Error handling**: Decoder failures stored as `{:decode_error, reason}`
 - **Match criteria**: Port, content-type, scope, path, method, content-id
+
+### Binary Preservation for Playback
+
+When you need both decoded data (for analysis) and original binary (for replay):
+
+```elixir
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
+  decoders: [my_decoder],
+  keep_binary: true  # Preserve original binary alongside decoded content
+)
+
+# UDP: payload_binary contains original when custom decoder was invoked
+datagram = hd(hd(result.udp).datagrams)
+case datagram.payload do
+  {:custom, decoded} ->
+    IO.inspect(decoded)  # Decoded for analysis
+    replay(datagram.payload_binary)  # Original for playback
+  raw when is_binary(raw) ->
+    replay(raw)  # No decoder matched
+end
+
+# HTTP multipart: body_binary contains original when custom decoder was invoked
+case part.body do
+  {:custom, decoded} ->
+    replay(part.body_binary)  # Original for playback
+  _ ->
+    :skip
+end
+```
+
+**Warning:** `keep_binary: true` doubles memory for decoded content.
 
 See `PcapFileEx.Flows.Decoder` module for complete documentation and decoder templates.
 

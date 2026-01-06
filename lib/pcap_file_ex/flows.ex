@@ -69,6 +69,9 @@ defmodule PcapFileEx.Flows do
     - `:hosts_map` - Map of IP address strings to hostname strings
     - `:decode_content` - Whether to decode HTTP bodies (default: true)
     - `:decoders` - List of custom decoder specs (see `PcapFileEx.Flows.Decoder`)
+    - `:keep_binary` - When `true`, preserve original binary in `payload_binary`/`body_binary`
+      when custom decoders are invoked (default: `false`). **Warning:** This doubles
+      memory usage for decoded content.
     - `:tcp_port` - Filter TCP traffic to specific port
     - `:udp_port` - Filter UDP traffic to specific port
 
@@ -96,12 +99,19 @@ defmodule PcapFileEx.Flows do
       # With custom decoders
       decoder = %{protocol: :udp, match: %{port: 5005}, decoder: &MyDecoder.decode/1}
       {:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng", decoders: [decoder])
+
+      # With binary preservation for playback
+      {:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
+        decoders: [decoder],
+        keep_binary: true
+      )
   """
   @spec analyze(Path.t(), keyword()) :: {:ok, AnalysisResult.t()} | {:error, term()}
   def analyze(pcap_path, opts \\ []) do
     hosts_map = Keyword.get(opts, :hosts_map, %{})
     decode_content = Keyword.get(opts, :decode_content, true)
     decoders = Keyword.get(opts, :decoders, [])
+    keep_binary = Keyword.get(opts, :keep_binary, false)
     tcp_port = Keyword.get(opts, :tcp_port)
     udp_port = Keyword.get(opts, :udp_port)
 
@@ -115,16 +125,22 @@ defmodule PcapFileEx.Flows do
         HTTP1.Analyzer.analyze(http1_segments,
           decode_content: decode_content,
           hosts_map: hosts_map,
-          decoders: decoders
+          decoders: decoders,
+          keep_binary: keep_binary
         )
 
       # Analyze HTTP/2 flows using existing analyzer, then convert
       {:ok, http2_flows} =
-        analyze_http2_flows(http2_segments, decode_content, hosts_map, decoders)
+        analyze_http2_flows(http2_segments, decode_content, hosts_map, decoders, keep_binary)
 
       # Collect UDP flows
       {:ok, udp_flows} =
-        UDP.Collector.extract(pcap_path, port: udp_port, hosts_map: hosts_map, decoders: decoders)
+        UDP.Collector.extract(pcap_path,
+          port: udp_port,
+          hosts_map: hosts_map,
+          decoders: decoders,
+          keep_binary: keep_binary
+        )
 
       # Build combined result
       result = AnalysisResult.build(http1_flows, http2_flows, udp_flows)
@@ -154,6 +170,7 @@ defmodule PcapFileEx.Flows do
     hosts_map = Keyword.get(opts, :hosts_map, %{})
     decode_content = Keyword.get(opts, :decode_content, true)
     decoders = Keyword.get(opts, :decoders, [])
+    keep_binary = Keyword.get(opts, :keep_binary, false)
 
     # Classify TCP flows
     {http1_segments, http2_segments} = classify_tcp_flows(tcp_segments)
@@ -163,15 +180,21 @@ defmodule PcapFileEx.Flows do
       HTTP1.Analyzer.analyze(http1_segments,
         decode_content: decode_content,
         hosts_map: hosts_map,
-        decoders: decoders
+        decoders: decoders,
+        keep_binary: keep_binary
       )
 
     # Analyze HTTP/2
-    {:ok, http2_flows} = analyze_http2_flows(http2_segments, decode_content, hosts_map, decoders)
+    {:ok, http2_flows} =
+      analyze_http2_flows(http2_segments, decode_content, hosts_map, decoders, keep_binary)
 
     # Collect UDP
     {:ok, udp_flows} =
-      UDP.Collector.collect(udp_packets, hosts_map: hosts_map, decoders: decoders)
+      UDP.Collector.collect(udp_packets,
+        hosts_map: hosts_map,
+        decoders: decoders,
+        keep_binary: keep_binary
+      )
 
     # Build result
     result = AnalysisResult.build(http1_flows, http2_flows, udp_flows)
@@ -216,7 +239,7 @@ defmodule PcapFileEx.Flows do
   end
 
   # Analyze HTTP/2 flows using existing PcapFileEx.HTTP2 analyzer
-  defp analyze_http2_flows(segments, decode_content, hosts_map, decoders) do
+  defp analyze_http2_flows(segments, decode_content, hosts_map, decoders, keep_binary) do
     if segments == [] do
       {:ok, []}
     else
@@ -225,7 +248,8 @@ defmodule PcapFileEx.Flows do
         PcapFileEx.HTTP2.analyze_segments(segments,
           decode_content: decode_content,
           hosts_map: hosts_map,
-          decoders: decoders
+          decoders: decoders,
+          keep_binary: keep_binary
         )
 
       # Convert to Flows format
