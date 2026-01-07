@@ -25,8 +25,9 @@
     - Separate tables for HTTP (requests, responses, bytes, avg RT) and UDP (packets, bytes, sizes)
     - Options: `:title`, `:humanize_bytes`, `:protocol` filter
   - `to_mermaid/2` - Generate Mermaid flowchart diagrams
-    - Shows clients, services grouped by protocol, and connections with traffic stats
-    - Options: `:direction` (:lr, :tb), `:group_by` (:protocol, :none)
+    - Options: `:style` (:host, :service), `:direction` (:lr, :tb), `:group_by` (:protocol, :none)
+    - `style: :host` (default) - Unified host nodes, hosts that are both client AND server appear once, protocol/port on edges
+    - `style: :service` - Each service (host:port) is a separate node, grouped by protocol with Clients subgraph
 
 ## [0.5.5] - 2026-01-06
 

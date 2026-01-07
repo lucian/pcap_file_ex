@@ -340,12 +340,37 @@ Render.to_markdown(summary,
 
 ```elixir
 Render.to_mermaid(summary,
+  style: :host,          # :host (default) or :service
   direction: :lr,        # :lr (left-right), :tb (top-bottom), :rl, :bt
-  group_by: :protocol    # :protocol (subgraphs per protocol) or :none
+  group_by: :protocol    # :protocol (subgraphs per protocol) or :none (only for :service)
 )
 ```
 
-#### Example Mermaid Output
+**Styles:**
+- `:host` (default) - Unified host nodes, protocol/port on edges. Hosts that act as both client AND server appear as a single node.
+- `:service` - Each service (host:port) is a separate node, grouped by protocol with Clients subgraph
+
+#### Example Mermaid Output (style: :host - default)
+
+```mermaid
+flowchart LR
+  web_client[web-client]
+  api_gateway[api-gateway]
+  metrics[metrics]
+  web_client -->|"HTTP/2 :8080 (45 req)"| api_gateway
+  web_client -->|"UDP :5005 (100 pkts)"| api_gateway
+```
+
+The default host-centric view:
+- Uses unified node IDs (hosts that are both client and server appear once)
+- No subgraphs - roles are clear from arrow direction
+- Protocol and port information shown on edges
+
+#### Example Mermaid Output (style: :service)
+
+```elixir
+Render.to_mermaid(summary, style: :service)
+```
 
 ```mermaid
 flowchart LR
@@ -359,9 +384,11 @@ flowchart LR
   subgraph UDP
     sudp_0[metrics:5005]
   end
-  c_web_client -->|45 req| shttp2_0
-  c_sensor_1 -->|1200 pkts| sudp_0
+  c_web_client -->|"45 req"| shttp2_0
+  c_sensor_1 -->|"1200 pkts"| sudp_0
 ```
+
+The service-centric view groups nodes by protocol with separate client/server nodes.
 
 ## Protocol Detection
 

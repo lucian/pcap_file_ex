@@ -69,22 +69,46 @@ defmodule PcapFileEx.Flows.Summary.Render do
 
   ## Options
 
+  - `:style` - :host (default) or :service
+    - `:host` - Unified host nodes. Hosts that act as both client AND server appear as a single node. Protocol/port info on edges.
+    - `:service` - Each service (host:port) is a separate node, grouped by protocol with Clients subgraph.
   - `:direction` - :lr (left-right, default) or :tb (top-bottom)
-  - `:group_by` - :protocol (default) or :none
+  - `:group_by` - :protocol (default) or :none (only applies to :service style)
 
-  ## Example
+  ## Example (default - unified host nodes)
 
       iex> mermaid = PcapFileEx.Flows.Summary.Render.to_mermaid(summary)
       iex> IO.puts(mermaid)
       flowchart LR
+        web_client[web-client]
+        api_gateway[api-gateway]
+        web_client -->|"HTTP/2 :8080 (45 req)"| api_gateway
+
+  ## Example (style: :service - separate client/server nodes)
+
+      iex> mermaid = PcapFileEx.Flows.Summary.Render.to_mermaid(summary, style: :service)
+      iex> IO.puts(mermaid)
+      flowchart LR
         subgraph Clients
-          c0[web-client]
+          c_web_client[web-client]
         end
-        ...
+        subgraph HTTP/2
+          shttp2_0[api-gateway:8080]
+        end
+        c_web_client -->|"45 req"| shttp2_0
   """
   @spec to_mermaid(Summary.t(), keyword()) :: String.t()
   def to_mermaid(%Summary{} = summary, opts \\ []) do
     direction = Keyword.get(opts, :direction, :lr)
+    style = Keyword.get(opts, :style, :host)
+
+    case style do
+      :host -> render_host_style(summary, direction)
+      _service -> render_service_style(summary, direction, opts)
+    end
+  end
+
+  defp render_service_style(summary, direction, opts) do
     group_by = Keyword.get(opts, :group_by, :protocol)
 
     # Collect all unique clients and services
@@ -98,6 +122,25 @@ defmodule PcapFileEx.Flows.Summary.Render do
           "flowchart #{direction_str(direction)}",
           client_subgraph(clients),
           service_subgraphs(services, group_by),
+          connection_lines(connections)
+        ]
+        |> List.flatten()
+        |> Enum.reject(&is_nil/1)
+
+      Enum.join(lines, "\n")
+    end
+  end
+
+  defp render_host_style(summary, direction) do
+    {all_nodes, connections} = extract_host_topology(summary)
+
+    if all_nodes == [] do
+      "flowchart #{direction_str(direction)}\n  %% Empty summary"
+    else
+      lines =
+        [
+          "flowchart #{direction_str(direction)}",
+          host_nodes(all_nodes),
           connection_lines(connections)
         ]
         |> List.flatten()
@@ -261,6 +304,81 @@ defmodule PcapFileEx.Flows.Summary.Render do
     end)
   end
 
+  # --- Host-Centric Topology (style: :host) ---
+
+  defp extract_host_topology(summary) do
+    # Collect all services with their protocol
+    http1_services = Enum.map(summary.http1, &{&1, :http1})
+    http2_services = Enum.map(summary.http2, &{&1, :http2})
+    udp_services = Enum.map(summary.udp, &{&1, :udp})
+
+    all_services = http1_services ++ http2_services ++ udp_services
+
+    # Build unified nodes map and connections
+    # All nodes (clients and servers) use the same ID format
+    {nodes_map, connections} =
+      Enum.reduce(all_services, {%{}, []}, fn {service, protocol}, {nodes, conns} ->
+        {host, port} = extract_host_and_port(service.server)
+        server_name = service.server_host || host
+        server_id = sanitize_id(server_name)
+
+        # Add server to unified nodes map
+        nodes = Map.put_new(nodes, server_name, server_id)
+
+        # Build connections and collect client nodes
+        {nodes, new_conns} =
+          Enum.reduce(service.clients, {nodes, []}, fn client, {acc_nodes, acc_conns} ->
+            client_name = client.client_host || client.client
+            client_id = sanitize_id(client_name)
+
+            # Add client to unified nodes map (same host may be client AND server)
+            acc_nodes = Map.put_new(acc_nodes, client_name, client_id)
+
+            stats = format_host_stats(client, protocol)
+            label = format_host_edge_label(protocol, port, stats)
+            conn = {client_id, server_id, label}
+
+            {acc_nodes, [conn | acc_conns]}
+          end)
+
+        {nodes, conns ++ Enum.reverse(new_conns)}
+      end)
+
+    # Convert nodes map to list of {name, id}
+    nodes_list = Enum.map(nodes_map, fn {name, id} -> {name, id} end)
+
+    {nodes_list, connections}
+  end
+
+  defp extract_host_and_port(server) do
+    case String.split(server, ":") do
+      [host, port] -> {host, port}
+      [host] -> {host, ""}
+    end
+  end
+
+  defp format_host_stats(client, protocol) when protocol in [:http1, :http2] do
+    "#{client.request_count} req"
+  end
+
+  defp format_host_stats(client, :udp) do
+    "#{client.packet_count} pkts"
+  end
+
+  defp format_host_edge_label(protocol, port, stats) do
+    proto_str = protocol_label(protocol)
+    "#{proto_str} :#{port} (#{stats})"
+  end
+
+  defp host_nodes([]), do: nil
+
+  defp host_nodes(hosts) do
+    hosts
+    |> Enum.map(fn {name, id} ->
+      "  #{id}[#{escape_mermaid(name)}]"
+    end)
+  end
+
   defp client_subgraph([]), do: nil
 
   defp client_subgraph(clients) do
@@ -308,7 +426,7 @@ defmodule PcapFileEx.Flows.Summary.Render do
     connections
     |> Enum.uniq()
     |> Enum.map(fn {from_id, to_id, label} ->
-      "  #{from_id} -->|#{label}| #{to_id}"
+      ~s(  #{from_id} -->|"#{label}"| #{to_id})
     end)
   end
 

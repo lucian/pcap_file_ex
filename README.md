@@ -1795,6 +1795,18 @@ IO.puts(mermaid)
 
 # Options: direction, grouping
 Render.to_mermaid(result.summary, direction: :tb, group_by: :none)
+
+# Host-centric view: one node per host, protocol/port on edges
+Render.to_mermaid(result.summary, style: :host)
+
+# Output:
+# flowchart LR
+#   subgraph Clients
+#     c_web_client[web-client]
+#   end
+#   s_api_gateway[api-gateway]
+#   c_web_client -->|HTTP/2 :8080 (45 req)| s_api_gateway
+#   c_web_client -->|UDP :5005 (100 pkts)| s_api_gateway
 ```
 
 ### Header
