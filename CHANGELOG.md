@@ -19,6 +19,14 @@
   - Respects `hosts_map` option for hostname display
 - **Endpoint.to_client_string/1** - Format endpoint as client identifier (IP/host only, no port)
   - Useful for grouping clients where ephemeral ports are not meaningful for identification
+- **Summary Visualization** - Render traffic summaries as markdown tables and Mermaid flowcharts
+  - New `PcapFileEx.Flows.Summary.Render` module
+  - `to_markdown/2` - Generate markdown tables for HTTP and UDP traffic
+    - Separate tables for HTTP (requests, responses, bytes, avg RT) and UDP (packets, bytes, sizes)
+    - Options: `:title`, `:humanize_bytes`, `:protocol` filter
+  - `to_mermaid/2` - Generate Mermaid flowchart diagrams
+    - Shows clients, services grouped by protocol, and connections with traffic stats
+    - Options: `:direction` (:lr, :tb), `:group_by` (:protocol, :none)
 
 ## [0.5.5] - 2026-01-06
 

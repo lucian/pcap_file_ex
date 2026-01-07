@@ -1745,6 +1745,58 @@ end)
 - Traffic aggregation (total bytes/requests per service)
 - Client analysis (which clients connect to which services)
 
+#### Render as Markdown Tables
+
+```elixir
+alias PcapFileEx.Flows.Summary.Render
+
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng")
+markdown = Render.to_markdown(result.summary)
+IO.puts(markdown)
+
+# Output:
+# ## HTTP Traffic
+# | Protocol | Server | Client | Requests | Responses | Req Bytes | Res Bytes | Avg RT (ms) |
+# |----------|--------|--------|----------|-----------|-----------|-----------|-------------|
+# | http2 | api-gateway:8080 | web-client | 45 | 44 | 12000 | 350000 | 75 |
+#
+# ## UDP Traffic
+# | Server | Client | Packets | Total Bytes | Avg Size | Min | Max |
+# |--------|--------|---------|-------------|----------|-----|-----|
+# | metrics:5005 | sensor-1 | 1200 | 600000 | 500 | 64 | 1400 |
+
+# Options: humanize bytes, filter by protocol
+Render.to_markdown(result.summary, humanize_bytes: true, protocol: :http2)
+```
+
+#### Render as Mermaid Flowchart
+
+```elixir
+alias PcapFileEx.Flows.Summary.Render
+
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng")
+mermaid = Render.to_mermaid(result.summary)
+IO.puts(mermaid)
+
+# Output:
+# flowchart LR
+#   subgraph Clients
+#     c_web_client[web-client]
+#     c_sensor_1[sensor-1]
+#   end
+#   subgraph HTTP/2
+#     shttp2_0[api-gateway:8080]
+#   end
+#   subgraph UDP
+#     sudp_0[metrics:5005]
+#   end
+#   c_web_client -->|45 req| shttp2_0
+#   c_sensor_1 -->|1200 pkts| sudp_0
+
+# Options: direction, grouping
+Render.to_mermaid(result.summary, direction: :tb, group_by: :none)
+```
+
 ### Header
 
 ```elixir

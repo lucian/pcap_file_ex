@@ -308,6 +308,61 @@ end)
 }
 ```
 
+### Rendering Summary
+
+Use `Summary.Render` to generate markdown tables or Mermaid flowcharts:
+
+```elixir
+alias PcapFileEx.Flows.Summary.Render
+
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng", hosts_map: hosts)
+
+# Markdown tables
+markdown = Render.to_markdown(result.summary)
+IO.puts(markdown)
+
+# Mermaid flowchart
+mermaid = Render.to_mermaid(result.summary)
+IO.puts(mermaid)
+```
+
+#### to_markdown/2 Options
+
+```elixir
+Render.to_markdown(summary,
+  title: true,           # Add "## HTTP Traffic" / "## UDP Traffic" headers
+  humanize_bytes: false, # Format as "1.5 MB" instead of "1500000"
+  protocol: :all         # :all, :http1, :http2, or :udp
+)
+```
+
+#### to_mermaid/2 Options
+
+```elixir
+Render.to_mermaid(summary,
+  direction: :lr,        # :lr (left-right), :tb (top-bottom), :rl, :bt
+  group_by: :protocol    # :protocol (subgraphs per protocol) or :none
+)
+```
+
+#### Example Mermaid Output
+
+```mermaid
+flowchart LR
+  subgraph Clients
+    c_web_client[web-client]
+    c_sensor_1[sensor-1]
+  end
+  subgraph HTTP/2
+    shttp2_0[api-gateway:8080]
+  end
+  subgraph UDP
+    sudp_0[metrics:5005]
+  end
+  c_web_client -->|45 req| shttp2_0
+  c_sensor_1 -->|1200 pkts| sudp_0
+```
+
 ## Protocol Detection
 
 TCP flows are classified by content inspection:
