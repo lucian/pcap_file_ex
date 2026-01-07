@@ -179,6 +179,28 @@ defmodule PcapFileEx.Endpoint do
   def to_string(%__MODULE__{ip: ip, port: port, host: nil}), do: "#{ip}:#{port}"
   def to_string(%__MODULE__{ip: _ip, port: port, host: host}), do: "#{host}:#{port}"
 
+  @doc """
+  Formats the endpoint as a client identifier (IP/host only, no port).
+
+  Client ports are ephemeral and not meaningful for identification.
+  Use this for topology diagrams where clients should be grouped by IP.
+
+  ## Examples
+
+      iex> PcapFileEx.Endpoint.to_client_string(%PcapFileEx.Endpoint{ip: "192.168.1.1", port: 52000, host: nil})
+      "192.168.1.1"
+
+      iex> PcapFileEx.Endpoint.to_client_string(%PcapFileEx.Endpoint{ip: "192.168.1.1", port: 52000, host: "client-machine"})
+      "client-machine"
+
+      iex> PcapFileEx.Endpoint.to_client_string(nil)
+      nil
+  """
+  @spec to_client_string(t() | nil) :: String.t() | nil
+  def to_client_string(nil), do: nil
+  def to_client_string(%__MODULE__{ip: ip, host: nil}), do: ip
+  def to_client_string(%__MODULE__{host: host}), do: host
+
   defimpl String.Chars do
     def to_string(endpoint), do: PcapFileEx.Endpoint.to_string(endpoint)
   end

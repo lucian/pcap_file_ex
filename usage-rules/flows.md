@@ -29,7 +29,8 @@ The main result structure containing all flows:
   http2: [HTTP2.Flow.t()],               # Sorted by first stream timestamp
   udp: [UDP.Flow.t()],                   # Sorted by first datagram timestamp
   timeline: [TimelineEvent.t()],         # Unified timeline
-  stats: Stats.t()                       # Aggregate statistics
+  stats: Stats.t(),                      # Aggregate statistics
+  summary: Summary.t()                   # Pre-aggregated traffic for topology
 }
 ```
 
@@ -184,6 +185,127 @@ hosts = %{
 result.http2
 |> Enum.map(fn f -> {f.flow.from, f.flow.server} end)
 # => [{"web-client", "api-gateway:8080"}, ...]
+```
+
+## Traffic Summary
+
+The `summary` field provides pre-aggregated traffic data for network topology visualization:
+
+```elixir
+%Summary{
+  udp: [%UDPService{}, ...],    # UDP destinations with per-client stats
+  http1: [%HTTPService{}, ...], # HTTP/1 servers with per-client stats
+  http2: [%HTTPService{}, ...]  # HTTP/2 servers with per-client stats
+}
+```
+
+### Use Cases
+
+- **Network diagrams** - Show services and connected clients
+- **Traffic aggregation** - Total bytes/requests per service
+- **Client analysis** - Which clients connect to which services
+
+### Accessing Summary
+
+```elixir
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng", hosts_map: hosts)
+
+# Services sorted by traffic volume (bytes desc)
+result.summary.http2
+|> Enum.each(fn service ->
+  IO.puts("#{service.server_host || service.server}")
+  IO.puts("  Total: #{service.total_requests} requests, #{service.total_response_bytes} bytes")
+  IO.puts("  Methods: #{inspect(service.methods)}")
+  IO.puts("  Status codes: #{inspect(service.status_codes)}")
+
+  Enum.each(service.clients, fn client ->
+    IO.puts("  - #{client.client_host || client.client}: #{client.request_count} requests")
+  end)
+end)
+
+# UDP summary
+result.summary.udp
+|> Enum.each(fn service ->
+  IO.puts("UDP #{service.server_host || service.server}:")
+  IO.puts("  Total: #{service.total_packets} packets, #{service.total_bytes} bytes")
+
+  Enum.each(service.clients, fn client ->
+    IO.puts("  - #{client.client_host || client.client}: #{client.packet_count} packets")
+  end)
+end)
+```
+
+### Summary Data Structures
+
+#### HTTPService
+
+```elixir
+%Summary.HTTPService{
+  protocol: :http1 | :http2,
+  server: "192.168.1.10:8080",       # IP:port string
+  server_host: "api-gateway",        # Hostname (from hosts_map)
+  clients: [%HTTPClientStats{}, ...],
+  total_requests: 150,
+  total_responses: 148,
+  total_request_bytes: 45000,
+  total_response_bytes: 1200000,
+  methods: %{"GET" => 100, "POST" => 50},
+  status_codes: %{200 => 140, 404 => 5, 500 => 3},
+  first_timestamp: %Timestamp{},
+  last_timestamp: %Timestamp{}
+}
+```
+
+#### HTTPClientStats
+
+```elixir
+%Summary.HTTPClientStats{
+  client: "10.0.0.5",               # Client IP (no port - ephemeral)
+  client_host: "web-client",        # Hostname (from hosts_map)
+  connection_count: 3,              # TCP connections
+  stream_count: 45,                 # HTTP/2 streams (nil for HTTP/1)
+  request_count: 45,
+  response_count: 44,
+  request_bytes: 12000,
+  response_bytes: 350000,
+  methods: %{"GET" => 40, "POST" => 5},
+  status_codes: %{200 => 42, 404 => 2},
+  avg_response_time_ms: 75,
+  min_response_time_ms: 12,
+  max_response_time_ms: 450,
+  first_timestamp: %Timestamp{},
+  last_timestamp: %Timestamp{}
+}
+```
+
+#### UDPService
+
+```elixir
+%Summary.UDPService{
+  server: "192.168.1.20:5005",      # IP:port string
+  server_host: "metrics-collector", # Hostname (from hosts_map)
+  clients: [%UDPClientStats{}, ...],
+  total_packets: 5000,
+  total_bytes: 2500000,
+  first_timestamp: %Timestamp{},
+  last_timestamp: %Timestamp{}
+}
+```
+
+#### UDPClientStats
+
+```elixir
+%Summary.UDPClientStats{
+  client: "10.0.0.5",               # Client IP (no port)
+  client_host: "sensor-node",       # Hostname (from hosts_map)
+  packet_count: 1200,
+  total_bytes: 600000,
+  avg_size: 500,
+  min_size: 64,
+  max_size: 1400,
+  first_timestamp: %Timestamp{},
+  last_timestamp: %Timestamp{}
+}
 ```
 
 ## Protocol Detection

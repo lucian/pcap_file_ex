@@ -3,7 +3,7 @@ defmodule PcapFileEx.Flows.AnalysisResult do
   Result of analyzing a PCAP file for traffic flows.
 
   Contains protocol-specific flow lists, a unified timeline for playback,
-  and a lookup map for O(1) flow access by key.
+  a lookup map for O(1) flow access by key, and a pre-aggregated traffic summary.
 
   ## Fields
 
@@ -13,6 +13,7 @@ defmodule PcapFileEx.Flows.AnalysisResult do
   - `udp` - List of UDP flows (sorted by first datagram timestamp)
   - `timeline` - Unified timeline of all events (sorted by timestamp, then deterministically by flow and event)
   - `stats` - Aggregate statistics across all flows
+  - `summary` - Pre-aggregated traffic data for topology visualization (see `PcapFileEx.Flows.Summary`)
 
   ## Flow Lookup
 
@@ -59,14 +60,15 @@ defmodule PcapFileEx.Flows.AnalysisResult do
   """
 
   alias PcapFileEx.FlowKey
-  alias PcapFileEx.Flows.{HTTP1, HTTP2, Stats, TimelineEvent, UDP}
+  alias PcapFileEx.Flows.{HTTP1, HTTP2, Stats, Summary, TimelineEvent, UDP}
 
   defstruct flows: %{},
             http1: [],
             http2: [],
             udp: [],
             timeline: [],
-            stats: %Stats{}
+            stats: %Stats{},
+            summary: nil
 
   @type flow_ref :: %{
           protocol: :http1 | :http2 | :udp,
@@ -79,7 +81,8 @@ defmodule PcapFileEx.Flows.AnalysisResult do
           http2: [HTTP2.Flow.t()],
           udp: [UDP.Flow.t()],
           timeline: [TimelineEvent.t()],
-          stats: Stats.t()
+          stats: Stats.t(),
+          summary: Summary.t() | nil
         }
 
   @doc """
@@ -173,16 +176,26 @@ defmodule PcapFileEx.Flows.AnalysisResult do
   @doc """
   Builds an AnalysisResult from protocol-specific flow lists.
 
-  Constructs the flows map, timeline, and aggregate stats.
+  Constructs the flows map, timeline, aggregate stats, and traffic summary.
 
   ## Parameters
 
   - `http1_flows` - List of HTTP/1 flows
   - `http2_flows` - List of HTTP/2 flows
   - `udp_flows` - List of UDP flows
+  - `opts` - Options:
+    - `:hosts_map` - Map of IP -> hostname for display in summary
+
+  ## Examples
+
+      AnalysisResult.build(http1_flows, http2_flows, udp_flows)
+      AnalysisResult.build(http1_flows, http2_flows, udp_flows,
+        hosts_map: %{"192.168.1.1" => "api-server"})
   """
-  @spec build([HTTP1.Flow.t()], [HTTP2.Flow.t()], [UDP.Flow.t()]) :: t()
-  def build(http1_flows, http2_flows, udp_flows) do
+  @spec build([HTTP1.Flow.t()], [HTTP2.Flow.t()], [UDP.Flow.t()], keyword()) :: t()
+  def build(http1_flows, http2_flows, udp_flows, opts \\ []) do
+    hosts_map = Keyword.get(opts, :hosts_map, %{})
+
     # Build flows lookup map
     flows_map =
       build_flows_map(http1_flows, :http1) ++
@@ -197,13 +210,17 @@ defmodule PcapFileEx.Flows.AnalysisResult do
     # Compute aggregate stats
     stats = compute_aggregate_stats(http1_flows, http2_flows, udp_flows)
 
+    # Build traffic summary for topology rendering
+    summary = Summary.build(http1_flows, http2_flows, udp_flows, hosts_map)
+
     %__MODULE__{
       flows: flows,
       http1: http1_flows,
       http2: http2_flows,
       udp: udp_flows,
       timeline: timeline,
-      stats: stats
+      stats: stats,
+      summary: summary
     }
   end
 

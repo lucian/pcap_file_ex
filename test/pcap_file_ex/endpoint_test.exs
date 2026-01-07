@@ -146,4 +146,39 @@ defmodule PcapFileEx.EndpointTest do
       assert Endpoint.to_string(endpoint) == "api-server:8080"
     end
   end
+
+  describe "to_client_string/1" do
+    test "returns nil for nil endpoint" do
+      assert Endpoint.to_client_string(nil) == nil
+    end
+
+    test "returns IP when no host" do
+      endpoint = Endpoint.new("192.168.1.1", 52_000)
+      assert Endpoint.to_client_string(endpoint) == "192.168.1.1"
+    end
+
+    test "returns host when host is set" do
+      endpoint = Endpoint.new("192.168.1.1", 52_000, "client-machine")
+      assert Endpoint.to_client_string(endpoint) == "client-machine"
+    end
+
+    test "ignores port - returns IP only" do
+      endpoint = Endpoint.new("10.0.0.1", 54_321)
+      # Client ports are ephemeral - to_client_string strips them
+      assert Endpoint.to_client_string(endpoint) == "10.0.0.1"
+      assert Endpoint.to_string(endpoint) == "10.0.0.1:54321"
+    end
+
+    test "ignores port - returns host only" do
+      endpoint = Endpoint.new("10.0.0.1", 54_321, "my-laptop")
+      # Client ports are ephemeral - to_client_string strips them
+      assert Endpoint.to_client_string(endpoint) == "my-laptop"
+      assert Endpoint.to_string(endpoint) == "my-laptop:54321"
+    end
+
+    test "works with IPv6 addresses" do
+      endpoint = Endpoint.new("::1", 52_000)
+      assert Endpoint.to_client_string(endpoint) == "::1"
+    end
+  end
 end

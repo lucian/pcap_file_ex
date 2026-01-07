@@ -142,8 +142,8 @@ defmodule PcapFileEx.Flows do
           keep_binary: keep_binary
         )
 
-      # Build combined result
-      result = AnalysisResult.build(http1_flows, http2_flows, udp_flows)
+      # Build combined result with traffic summary
+      result = AnalysisResult.build(http1_flows, http2_flows, udp_flows, hosts_map: hosts_map)
 
       {:ok, result}
     end
@@ -196,8 +196,8 @@ defmodule PcapFileEx.Flows do
         keep_binary: keep_binary
       )
 
-    # Build result
-    result = AnalysisResult.build(http1_flows, http2_flows, udp_flows)
+    # Build result with traffic summary
+    result = AnalysisResult.build(http1_flows, http2_flows, udp_flows, hosts_map: hosts_map)
 
     {:ok, result}
   end

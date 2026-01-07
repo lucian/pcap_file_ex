@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.6-dev] - Unreleased
+
+### Added
+- **Traffic Summary for Topology Visualization** - Pre-aggregated traffic data in `AnalysisResult.summary`
+  - New `PcapFileEx.Flows.Summary` module aggregates flows for network topology diagrams
+  - Groups traffic by destination service with per-client statistics
+  - Summary includes:
+    - `udp` - UDP services (`Summary.UDPService`) with client stats
+    - `http1` - HTTP/1 services (`Summary.HTTPService`) with client stats
+    - `http2` - HTTP/2 services (`Summary.HTTPService`) with client stats
+  - New supporting structs:
+    - `Summary.HTTPService` - Server + clients list + aggregated metrics (requests, responses, bytes, methods, status codes)
+    - `Summary.HTTPClientStats` - Per-client request/response counts, bytes, methods, status codes, response times
+    - `Summary.UDPService` - Server + clients list + packet/byte totals
+    - `Summary.UDPClientStats` - Per-client packet counts, byte totals, size stats, timestamps
+  - Services sorted by traffic volume (bytes) for prioritization
+  - Respects `hosts_map` option for hostname display
+- **Endpoint.to_client_string/1** - Format endpoint as client identifier (IP/host only, no port)
+  - Useful for grouping clients where ephemeral ports are not meaningful for identification
+
 ## [0.5.5] - 2026-01-06
 
 ### Added

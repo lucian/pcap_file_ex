@@ -1616,6 +1616,7 @@ flow = PcapFileEx.Flows.AnalysisResult.get_flow(result, key)
 - ✅ **HTTP/1 reconstruction** - Request/response pairing with chunked encoding support
 - ✅ **HTTP/2 integration** - Wraps existing HTTP/2 analyzer with flow metadata
 - ✅ **Custom Decoders** - Decode domain-specific protocols (UDP telemetry, 5G SBI multipart, etc.)
+- ✅ **Traffic Summary** - Pre-aggregated traffic data for topology visualization
 
 ### Custom Decoders for Flows
 
@@ -1703,6 +1704,46 @@ end
 **Warning:** `keep_binary: true` doubles memory for decoded content.
 
 See `PcapFileEx.Flows.Decoder` module for complete documentation and decoder templates.
+
+### Traffic Summary
+
+Access pre-aggregated traffic data for network topology visualization:
+
+```elixir
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng", hosts_map: hosts)
+
+# Summary provides services grouped by destination with per-client stats
+# - result.summary.udp    -> UDP services
+# - result.summary.http1  -> HTTP/1 services
+# - result.summary.http2  -> HTTP/2 services
+
+# UDP services (sorted by traffic volume)
+Enum.each(result.summary.udp, fn service ->
+  IO.puts("UDP #{service.server_host || service.server}:")
+  IO.puts("  Total: #{service.total_packets} packets, #{service.total_bytes} bytes")
+
+  Enum.each(service.clients, fn client ->
+    IO.puts("  - #{client.client_host || client.client}: #{client.packet_count} packets")
+  end)
+end)
+
+# HTTP services (sorted by traffic volume)
+Enum.each(result.summary.http2, fn service ->
+  IO.puts("HTTP/2 #{service.server_host || service.server}:")
+  IO.puts("  Total: #{service.total_requests} requests")
+  IO.puts("  Methods: #{inspect(service.methods)}")
+  IO.puts("  Status codes: #{inspect(service.status_codes)}")
+
+  Enum.each(service.clients, fn client ->
+    IO.puts("  - #{client.client_host || client.client}: #{client.request_count} requests")
+  end)
+end)
+```
+
+**Use cases:**
+- Network topology diagrams showing services and connected clients
+- Traffic aggregation (total bytes/requests per service)
+- Client analysis (which clients connect to which services)
 
 ### Header
 
