@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.6-dev] - Unreleased
+## [0.5.6] - 2026-01-07
 
 ### Added
 - **Traffic Summary for Topology Visualization** - Pre-aggregated traffic data in `AnalysisResult.summary`
