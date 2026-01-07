@@ -1639,37 +1639,45 @@ ngap_decoder = %{
   end
 }
 
-# Analyze with custom decoders
+# Analyze with custom decoders (results unwrapped by default)
 {:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
   decoders: [udp_decoder, ngap_decoder]
 )
 
-# Access decoded UDP payload
+# Access decoded UDP payload - decoder results returned directly
 datagram = hd(hd(result.udp).datagrams)
 case datagram.payload do
-  {:custom, data} -> IO.inspect(data)
+  {:my_telemetry, data} -> IO.inspect(data)  # Decoder result returned directly
   {:decode_error, reason} -> IO.puts("Failed: #{inspect(reason)}")
   raw when is_binary(raw) -> IO.puts("No decoder matched")
 end
 
-# Access decoded HTTP multipart part
+# Access decoded HTTP multipart part - decoder results returned directly
 exchange = hd(hd(result.http1).exchanges)
 case exchange.response.decoded_body do
   {:multipart, parts} ->
     Enum.each(parts, fn part ->
       case part.body do
-        {:custom, data} -> IO.inspect(data)
+        {:ngap, id, parsed} -> IO.inspect({id, parsed})  # Decoder result directly
         _ -> :skip
       end
     end)
   _ -> :skip
 end
+
+# To get wrapped results like {:custom, value}, use unwrap_custom: false
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
+  decoders: [udp_decoder],
+  unwrap_custom: false
+)
+# datagram.payload is now {:custom, {:my_telemetry, data}}
 ```
 
 **Key features:**
 - **Binary-only**: Custom decoders run only when built-in decoding yields `{:binary, payload}`
-- **Result wrapping**: Decoded values wrapped as `{:custom, term}` to distinguish from built-in decoding
-- **Error handling**: Decoder failures stored as `{:decode_error, reason}`
+- **Unwrapped by default**: Decoder results returned directly (e.g., `{:my_proto, data}`)
+- **Optional wrapping**: Pass `unwrap_custom: false` to get `{:custom, value}` tuples
+- **Error handling**: Decoder failures stored as `{:decode_error, reason}` (always wrapped)
 - **Match criteria**: Port, content-type, scope, path, method, content-id
 
 ### Binary Preservation for Playback
@@ -1685,17 +1693,21 @@ When you need both decoded data (for analysis) and original binary (for replay):
 # UDP: payload_binary contains original when custom decoder was invoked
 datagram = hd(hd(result.udp).datagrams)
 case datagram.payload do
-  {:custom, decoded} ->
-    IO.inspect(decoded)  # Decoded for analysis
+  {:my_proto, decoded} ->
+    IO.inspect(decoded)  # Decoded for analysis (unwrapped by default)
     replay(datagram.payload_binary)  # Original for playback
+  {:decode_error, _reason} ->
+    replay(datagram.payload_binary)  # Recovery from original
   raw when is_binary(raw) ->
     replay(raw)  # No decoder matched
 end
 
 # HTTP multipart: body_binary contains original when custom decoder was invoked
 case part.body do
-  {:custom, decoded} ->
+  {:my_proto, _decoded} ->
     replay(part.body_binary)  # Original for playback
+  {:decode_error, _} ->
+    replay(part.body_binary)  # Recovery from original
   _ ->
     :skip
 end

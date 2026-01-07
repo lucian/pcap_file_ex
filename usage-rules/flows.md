@@ -411,10 +411,35 @@ ProtocolDetector.detect(<<0, 1, 2, 3>>)  # => :unknown
 PcapFileEx.Flows.analyze("capture.pcapng",
   hosts_map: %{...},      # IP to hostname mapping
   decode_content: true,   # Decode HTTP bodies (default: true)
+  decoders: [...],        # Custom decoder specs (see flows-decoders.md)
+  keep_binary: false,     # Preserve original binary after decoding (default: false)
+  unwrap_custom: true,    # Return custom decoder results directly (default: true)
   tcp_port: 8080,         # Filter TCP to specific port
   udp_port: 5005          # Filter UDP to specific port
 )
 ```
+
+### unwrap_custom Option
+
+Controls how custom decoder results are returned:
+
+- `unwrap_custom: true` (default) - Decoder results returned directly
+- `unwrap_custom: false` - Results wrapped in `{:custom, ...}` tuples
+
+```elixir
+# Default behavior: decoder results are unwrapped
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng", decoders: [my_decoder])
+datagram.payload  # => {:my_telemetry, %{sensor: 1, temp: 23.5}}
+
+# With unwrap_custom: false: wrapped in {:custom, ...}
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
+  decoders: [my_decoder],
+  unwrap_custom: false
+)
+datagram.payload  # => {:custom, {:my_telemetry, %{sensor: 1, temp: 23.5}}}
+```
+
+See `flows-decoders.md` for full custom decoder documentation.
 
 ## Common Patterns
 

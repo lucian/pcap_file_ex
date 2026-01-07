@@ -72,6 +72,9 @@ defmodule PcapFileEx.Flows do
     - `:keep_binary` - When `true`, preserve original binary in `payload_binary`/`body_binary`
       when custom decoders are invoked (default: `false`). **Warning:** This doubles
       memory usage for decoded content.
+    - `:unwrap_custom` - When `true` (default), custom decoder results are returned directly
+      without the `{:custom, ...}` wrapper tuple. Set to `false` to get wrapped results
+      like `{:custom, decoded_value}`.
     - `:tcp_port` - Filter TCP traffic to specific port
     - `:udp_port` - Filter UDP traffic to specific port
 
@@ -112,6 +115,7 @@ defmodule PcapFileEx.Flows do
     decode_content = Keyword.get(opts, :decode_content, true)
     decoders = Keyword.get(opts, :decoders, [])
     keep_binary = Keyword.get(opts, :keep_binary, false)
+    unwrap_custom = Keyword.get(opts, :unwrap_custom, true)
     tcp_port = Keyword.get(opts, :tcp_port)
     udp_port = Keyword.get(opts, :udp_port)
 
@@ -145,6 +149,9 @@ defmodule PcapFileEx.Flows do
       # Build combined result with traffic summary
       result = AnalysisResult.build(http1_flows, http2_flows, udp_flows, hosts_map: hosts_map)
 
+      # Unwrap {:custom, value} tuples when unwrap_custom: true (default)
+      result = if unwrap_custom, do: unwrap_custom_values(result), else: result
+
       {:ok, result}
     end
   end
@@ -171,6 +178,7 @@ defmodule PcapFileEx.Flows do
     decode_content = Keyword.get(opts, :decode_content, true)
     decoders = Keyword.get(opts, :decoders, [])
     keep_binary = Keyword.get(opts, :keep_binary, false)
+    unwrap_custom = Keyword.get(opts, :unwrap_custom, true)
 
     # Classify TCP flows
     {http1_segments, http2_segments} = classify_tcp_flows(tcp_segments)
@@ -198,6 +206,9 @@ defmodule PcapFileEx.Flows do
 
     # Build result with traffic summary
     result = AnalysisResult.build(http1_flows, http2_flows, udp_flows, hosts_map: hosts_map)
+
+    # Unwrap {:custom, value} tuples when unwrap_custom: true (default)
+    result = if unwrap_custom, do: unwrap_custom_values(result), else: result
 
     {:ok, result}
   end
@@ -237,6 +248,87 @@ defmodule PcapFileEx.Flows do
       data -> ProtocolDetector.detect(data)
     end
   end
+
+  # Unwrap {:custom, value} tuples to just value throughout the result
+  # Leaves {:decode_error, reason} unchanged
+  defp unwrap_custom_values(result) do
+    %{
+      result
+      | http1: Enum.map(result.http1, &unwrap_http1_flow/1),
+        http2: Enum.map(result.http2, &unwrap_http2_flow/1),
+        udp: Enum.map(result.udp, &unwrap_udp_flow/1)
+    }
+  end
+
+  defp unwrap_http1_flow(flow) do
+    %{flow | exchanges: Enum.map(flow.exchanges, &unwrap_http1_exchange/1)}
+  end
+
+  defp unwrap_http1_exchange(exchange) do
+    %{
+      exchange
+      | request: unwrap_decoded_body(exchange.request),
+        response: unwrap_decoded_body(exchange.response)
+    }
+  end
+
+  defp unwrap_http2_flow(flow) do
+    %{
+      flow
+      | streams: Enum.map(flow.streams, &unwrap_http2_stream/1),
+        incomplete: Enum.map(flow.incomplete, &unwrap_http2_incomplete/1)
+    }
+  end
+
+  defp unwrap_http2_stream(stream) do
+    %{stream | exchange: unwrap_http2_exchange(stream.exchange)}
+  end
+
+  defp unwrap_http2_exchange(exchange) do
+    %{
+      exchange
+      | request: unwrap_decoded_body(exchange.request),
+        response: unwrap_decoded_body(exchange.response)
+    }
+  end
+
+  defp unwrap_http2_incomplete(incomplete) do
+    request = if incomplete.request, do: unwrap_decoded_body(incomplete.request), else: nil
+    response = if incomplete.response, do: unwrap_decoded_body(incomplete.response), else: nil
+    %{incomplete | request: request, response: response}
+  end
+
+  defp unwrap_udp_flow(flow) do
+    %{flow | datagrams: Enum.map(flow.datagrams, &unwrap_udp_datagram/1)}
+  end
+
+  defp unwrap_udp_datagram(datagram) do
+    %{datagram | payload: unwrap_custom(datagram.payload)}
+  end
+
+  # Unwrap decoded_body in request/response maps
+  defp unwrap_decoded_body(nil), do: nil
+
+  defp unwrap_decoded_body(req_or_resp) when is_map(req_or_resp) do
+    case Map.get(req_or_resp, :decoded_body) do
+      nil -> req_or_resp
+      decoded_body -> %{req_or_resp | decoded_body: unwrap_decoded(decoded_body)}
+    end
+  end
+
+  # Unwrap decoded content - handles nested multipart structures
+  defp unwrap_decoded({:custom, value}), do: value
+  defp unwrap_decoded({:decode_error, _} = error), do: error
+  defp unwrap_decoded({:multipart, parts}), do: {:multipart, Enum.map(parts, &unwrap_part/1)}
+  defp unwrap_decoded(other), do: other
+
+  defp unwrap_part(part) when is_map(part) do
+    %{part | body: unwrap_decoded(part.body)}
+  end
+
+  # Unwrap custom tuple for UDP payloads
+  defp unwrap_custom({:custom, value}), do: value
+  defp unwrap_custom(other), do: other
 
   # Analyze HTTP/2 flows using existing PcapFileEx.HTTP2 analyzer
   defp analyze_http2_flows(segments, decode_content, hosts_map, decoders, keep_binary) do

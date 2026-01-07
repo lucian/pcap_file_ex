@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.7] - 2026-01-07
+
+### Breaking
+
+- **Custom decoder results now unwrapped by default** - The `PcapFileEx.Flows.analyze/2` function
+  now returns custom decoder results directly without the `{:custom, ...}` wrapper tuple.
+  - **Before (v0.5.6):** `datagram.payload` returned `{:custom, {:my_data, ...}}`
+  - **After (v0.5.7):** `datagram.payload` returns `{:my_data, ...}` directly
+  - **Migration:** To preserve the old behavior, pass `unwrap_custom: false`:
+    ```elixir
+    {:ok, result} = PcapFileEx.Flows.analyze(file, decoders: my_decoders, unwrap_custom: false)
+    ```
+  - `{:decode_error, reason}` tuples remain unchanged (not unwrapped)
+  - Affects UDP datagram payloads, HTTP request/response `decoded_body`, and multipart part bodies
+
+### Added
+
+- **`:unwrap_custom` option** for `PcapFileEx.Flows.analyze/2` and `analyze_segments/3`
+  - When `true` (default): Custom decoder results returned directly (e.g., `{:my_proto, data}`)
+  - When `false`: Custom decoder results wrapped as `{:custom, {:my_proto, data}}`
+  - Simplifies pattern matching for consumers who don't need to distinguish custom from built-in decoding
+
 ## [0.5.6] - 2026-01-07
 
 ### Added

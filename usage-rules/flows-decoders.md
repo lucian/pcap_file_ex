@@ -25,13 +25,20 @@ decoder = %{
   decoders: [decoder]
 )
 
-# Access decoded payload (BREAKING: payload type changed in v0.6.0)
+# Access decoded payload - decoder results returned directly (v0.5.7+)
 datagram = hd(hd(result.udp).datagrams)
 case datagram.payload do
-  {:custom, data} -> IO.inspect(data)
+  {:my_telemetry, data} -> IO.inspect(data)  # Decoder result directly
   {:decode_error, reason} -> IO.puts("Error: #{inspect(reason)}")
   raw when is_binary(raw) -> IO.puts("No decoder matched")
 end
+
+# To get wrapped results like {:custom, value}, use unwrap_custom: false
+{:ok, result} = PcapFileEx.Flows.analyze("capture.pcapng",
+  decoders: [decoder],
+  unwrap_custom: false
+)
+# datagram.payload is now {:custom, {:my_telemetry, data}}
 ```
 
 ## Decoder Specification
@@ -88,14 +95,14 @@ end
 
 ### Arity-1 (Simple)
 
-Receives only payload. Any return value is wrapped as `{:custom, term}`.
+Receives only payload. Return value is stored directly (unwrapped by default).
 
 ```elixir
 decoder = %{
   protocol: :udp,
   match: %{port: 5005},
   decoder: fn payload ->
-    # Return any term - gets wrapped as {:custom, term}
+    # Return any term - stored directly as the payload
     MyParser.parse(payload)
   end
 }
@@ -109,8 +116,8 @@ decoder = %{
 ```
 
 **Return values:**
-- Any term → stored as `{:custom, term}`
-- `{:error, reason}` → stored as `{:decode_error, reason}`
+- Any term → stored directly (or as `{:custom, term}` if `unwrap_custom: false`)
+- `{:error, reason}` → stored as `{:decode_error, reason}` (always wrapped)
 
 ### Arity-2 (Context-Aware)
 
@@ -130,8 +137,8 @@ decoder = %{
 ```
 
 **Return values:**
-- `{:ok, term}` → stored as `{:custom, term}`
-- `{:error, reason}` → stored as `{:decode_error, reason}` (terminal)
+- `{:ok, term}` → stored directly (or as `{:custom, term}` if `unwrap_custom: false`)
+- `{:error, reason}` → stored as `{:decode_error, reason}` (always wrapped)
 - `:skip` → try next decoder, or fall back to binary
 
 ### Module-Based
@@ -239,26 +246,34 @@ Each part follows the same pipeline:
 
 ## Result Wrapping
 
-Custom decoder results are wrapped to distinguish from built-in decoding:
+By default (`unwrap_custom: true`), custom decoder results are stored directly without wrapping.
+Use `unwrap_custom: false` to get wrapped `{:custom, term}` results.
 
-| Decoder Return | Stored Value |
-|---------------|--------------|
-| `{:ok, term}` (arity-2) | `{:custom, term}` |
-| `term` (arity-1) | `{:custom, term}` |
-| `{:error, reason}` | `{:decode_error, reason}` |
-| Exception raised | `{:decode_error, %{exception: e, stacktrace: st}}` |
-| `:skip` | Falls through to next decoder |
+| Decoder Return | Default (`unwrap_custom: true`) | With `unwrap_custom: false` |
+|---------------|--------------------------------|----------------------------|
+| `{:ok, term}` (arity-2) | `term` | `{:custom, term}` |
+| `term` (arity-1) | `term` | `{:custom, term}` |
+| `{:error, reason}` | `{:decode_error, reason}` | `{:decode_error, reason}` |
+| Exception raised | `{:decode_error, %{exception: e, stacktrace: st}}` | same |
+| `:skip` | Falls through to next decoder | same |
 
-Pattern match on results:
+Pattern match on results (default behavior):
 
 ```elixir
 case exchange.response.decoded_body do
-  {:custom, data} -> handle_custom(data)
-  {:decode_error, reason} -> handle_error(reason)
-  {:json, json} -> handle_json(json)
+  {:my_protocol, data} -> handle_custom(data)     # Decoder result directly
+  {:decode_error, reason} -> handle_error(reason) # Errors always wrapped
+  {:json, json} -> handle_json(json)              # Built-in decoders unchanged
   {:text, text} -> handle_text(text)
   {:multipart, parts} -> handle_multipart(parts)
   {:binary, raw} -> handle_binary(raw)
+end
+
+# With unwrap_custom: false, custom results are wrapped:
+case exchange.response.decoded_body do
+  {:custom, data} -> handle_custom(data)          # Wrapped in {:custom, ...}
+  {:decode_error, reason} -> handle_error(reason)
+  # ... same for built-in decoders
 end
 ```
 
@@ -326,10 +341,10 @@ conditional_decoder = %{
 
 ## Error Handling
 
-Decoder errors are stored, not raised:
+Decoder errors are stored as `{:decode_error, reason}`, not raised:
 
 ```elixir
-# Check for decode errors in UDP
+# Check for decode errors in UDP (default unwrap_custom: true)
 Enum.each(result.udp, fn flow ->
   Enum.each(flow.datagrams, fn dg ->
     case dg.payload do
@@ -337,10 +352,10 @@ Enum.each(result.udp, fn flow ->
         Logger.error("Decoder crashed: #{inspect(e)}")
       {:decode_error, reason} ->
         Logger.warning("Decode failed: #{inspect(reason)}")
-      {:custom, _data} ->
-        :ok  # Successfully decoded
       raw when is_binary(raw) ->
         :ok  # No decoder matched
+      decoded ->
+        :ok  # Successfully decoded (unwrapped result)
     end
   end)
 end)
@@ -412,21 +427,12 @@ When using custom decoders, you may need both the decoded data (for analysis) an
 
 ### UDP Datagrams
 
-When a custom decoder transforms a UDP datagram:
+When a custom decoder transforms a UDP datagram (default `unwrap_custom: true`):
 
 ```elixir
 datagram = hd(hd(result.udp).datagrams)
 
 case datagram.payload do
-  {:custom, decoded_data} ->
-    # Decoded content for analysis
-    IO.inspect(decoded_data)
-
-    # Original binary for playback (only when keep_binary: true)
-    if datagram.payload_binary do
-      replay(datagram.payload_binary)
-    end
-
   {:decode_error, reason} ->
     # Decoder failed, but binary preserved for debugging
     Logger.error("Decode failed: #{inspect(reason)}")
@@ -437,6 +443,15 @@ case datagram.payload do
   raw when is_binary(raw) ->
     # No decoder matched - raw binary in payload, no payload_binary
     replay(raw)
+
+  decoded_data ->
+    # Decoded content for analysis (unwrapped by default)
+    IO.inspect(decoded_data)
+
+    # Original binary for playback (only when keep_binary: true)
+    if datagram.payload_binary do
+      replay(datagram.payload_binary)
+    end
 end
 ```
 
@@ -447,28 +462,35 @@ end
 
 ### Multipart Parts
 
-For HTTP multipart responses with custom decoders:
+For HTTP multipart responses with custom decoders (default `unwrap_custom: true`):
 
 ```elixir
 case exchange.response.decoded_body do
   {:multipart, parts} ->
     Enum.each(parts, fn part ->
       case part.body do
-        {:custom, decoded_data} ->
-          # Decoded content
-          IO.inspect(decoded_data)
-          # Original binary (only when keep_binary: true)
-          if part.body_binary, do: replay(part.body_binary)
-
         {:decode_error, reason} ->
           Logger.error("Part decode failed: #{inspect(reason)}")
           # Binary preserved for debugging
           if part.body_binary, do: debug(part.body_binary)
 
-        other ->
-          # Built-in decoded ({:json, _}, {:text, _}, {:binary, _})
-          # No body_binary field
-          IO.inspect(other)
+        {:json, _} = json ->
+          # Built-in JSON decoder (no body_binary)
+          IO.inspect(json)
+
+        {:text, _} = text ->
+          # Built-in text decoder (no body_binary)
+          IO.inspect(text)
+
+        {:binary, _} = binary ->
+          # Built-in binary fallback (no body_binary)
+          IO.inspect(binary)
+
+        decoded_data ->
+          # Custom decoded content (unwrapped by default)
+          IO.inspect(decoded_data)
+          # Original binary (only when keep_binary: true)
+          if part.body_binary, do: replay(part.body_binary)
       end
     end)
   _ ->
@@ -482,8 +504,9 @@ end
 @doc "Get raw binary for playback. Returns nil if not preserved."
 def get_raw_payload(datagram) do
   case datagram.payload do
-    raw when is_binary(raw) -> raw
-    _decoded -> datagram.payload_binary
+    raw when is_binary(raw) -> raw              # No decoder matched
+    {:decode_error, _} -> datagram.payload_binary  # Decoder failed
+    _decoded -> datagram.payload_binary         # Custom decoded (unwrapped)
   end
 end
 
